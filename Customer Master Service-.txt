@@ -1,0 +1,335 @@
+Controllers - 
+
+Service. CustomerMaster 
+
+1 - Get All Roles -
+
+      // Get ALl Roles 
+     // [Authorize(Policy = "AdminOrUser")]
+      [HttpGet("GetAllRoles")]
+//      [ServiceFilter(typeof(EncryptionActionFilter))]
+      public async Task<IActionResult> GetAllRoles()
+      {
+          try
+          {
+              var roles = await customerRepository.GetAllRolesAsync();
+
+              if (roles == null || !roles.Any())
+              {
+                  return NotFound(new
+                  {
+                      StatusCode = 404,
+                      Message = "No roles found"
+                  });
+              }
+
+              return Ok(new
+              {
+                  StatusCode = 200,
+                  Data = roles
+              });
+          }
+          catch (Exception ex)
+          {
+              return StatusCode(500, new
+              {
+                  StatusCode = 500,
+                  Message = "An error occurred while retrieving roles",
+                  Error = ex.Message
+              });
+          }
+      }
+
+
+2 - Get USer Designation 
+
+// Get All UserTypes
+
+[HttpGet("GetUserDesignation")]
+public async Task<IActionResult> GetAllJobTitle()
+{
+    try
+    {
+        var data = await customerRepository.GetAllJobTitleAsync();
+
+        if(data == null || !data.Any())
+        {
+            return NotFound(new
+            {
+                StatusCode = 400,
+                Messgae = "No JobTitle Found"
+            });
+        }
+
+        return Ok(new
+        { 
+        
+            StatusCode = 200,
+            Data = data
+        });
+    }
+
+    catch (Exception ex)
+    {
+        return StatusCode(500, new
+        {
+            StatusCode = 500,
+            Message = "Error retrieving JobTitle",
+            Error = ex.Message
+        });
+    }
+}
+
+
+3 - Update Roles Details 
+
+    [HttpPut("UpdateRoleDetails")]
+    public async Task <IActionResult> UpdateRoleDetails([FromBody] UpdateRoleDetailsDTO dto)
+    {
+        try
+        {
+            var result = await customerRepository.UpdateRoleDetailsByJobTitleAsync(dto);
+
+            if(!result)
+            {
+                return NotFound(new
+                {
+                    StatusCode = 404,
+                    Message = "No User Found with given JobTitle"
+                });
+            }
+
+            return Ok(new
+            {
+                StatusCode = 200,
+                Message = "Role Details Update SuccessFully"
+            });
+        }
+
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                StatusCode = 500,
+                Message = "Error Updating Role Details",
+                Error = ex.Message
+            });
+        }
+    }
+
+
+DTOs - 
+
+1 - 
+namespace SalesOrder.Services.CustomerMaster.DAL.DTOs
+{
+    public class RoleDTO
+    {
+        public int RoleId { get; set; }
+
+        public string RoleName { get; set; }
+    }
+
+
+    public class RoleResponseDTO
+    {
+        public int RoleId { get; set; }
+        public string RoleName { get; set; }
+    }
+}
+
+
+2 -
+namespace SalesOrder.Services.CustomerMaster.DAL.DTOs
+{
+    public class JobTitleDTO
+    {
+        public string JobTitle { get; set; }
+    }
+}
+
+
+3 - 
+namespace SalesOrder.Services.CustomerMaster.DAL.DTOs
+{
+    public class UpdateRoleDetailsDTO
+    {
+        public string JobTitle { get; set; }
+
+        public int RoleId { get; set; }
+
+        public string RoleDetails { get; set; }
+    }
+}
+
+
+Interface - 
+
+ Task<IEnumerable<JobTitleDTO>> GetAllJobTitleAsync();
+
+ Task<List<RoleDTO>> GetAllRolesAsync();
+
+ Task<bool> UpdateRoleDetailsByJobTitleAsync(UpdateRoleDetailsDTO model);
+
+
+Repository - 
+
+ // Get All Roles 
+ public async Task<List<RoleDTO>> GetAllRolesAsync()
+ {
+     var roles = new List<RoleDTO>();
+
+     try
+     {
+         using (SqlConnection conn = new SqlConnection(connectionString))
+         {
+             using (SqlCommand cmd = new SqlCommand())
+             {
+                 cmd.Connection = conn;
+                 cmd.CommandType = CommandType.Text;
+
+                 cmd.CommandText = "SELECT RoleId, RoleName FROM dbo.Roles ORDER BY RoleId";
+
+                 await conn.OpenAsync();
+
+                 using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                 {
+                     while (await reader.ReadAsync())
+                     {
+                         roles.Add(new RoleDTO
+                         {
+                             RoleId = Convert.ToInt32(reader["RoleId"]),
+                             RoleName = reader["RoleName"].ToString()
+                         });
+                     }
+                 }
+             }
+         }
+
+         return roles;
+     }
+     catch (Exception ex)
+     {
+         throw new ApplicationException("Error retrieving roles", ex);
+
+     }
+ }
+
+// Get All Jobtitle
+
+ public async Task<IEnumerable<JobTitleDTO>> GetAllJobTitleAsync()
+ {
+     var jobTitles = new List<JobTitleDTO>();
+
+     try
+     {
+         using (SqlConnection conn = new SqlConnection(connectionString))
+         {
+             using (SqlCommand cmd = new SqlCommand("dbo.USP_GetAllJobTitles", conn))
+             {
+                 cmd.CommandType = CommandType.StoredProcedure;
+
+                 await conn.OpenAsync();
+
+                 using (SqlDataReader reader = await cmd.ExecuteReaderAsync())
+                 {
+                     while (await reader.ReadAsync())
+                     {
+                         jobTitles.Add(new JobTitleDTO
+                         {
+                             JobTitle = reader["JobTitle"].ToString()
+                         });
+                     }
+                 }
+             }
+         }
+
+         return jobTitles;
+     }
+     catch (Exception ex)
+     {
+         throw new ApplicationException("Error retrieving JobTitles", ex);
+     }
+ }
+
+// Update Role Details by Job
+
+ public async Task<bool> UpdateRoleDetailsByJobTitleAsync(UpdateRoleDetailsDTO model)
+ {
+     try
+     {
+         using (SqlConnection conn = new SqlConnection(connectionString))
+         {
+             using (SqlCommand cmd = new SqlCommand("dbo.USP_UpdateRoleDetailsByJobTitle", conn))
+             {
+                 cmd.CommandType = CommandType.StoredProcedure;
+
+                 cmd.Parameters.AddWithValue("@JobTitle", model.JobTitle);
+                 cmd.Parameters.AddWithValue("@RoleId", model.RoleId);
+                 cmd.Parameters.AddWithValue("@RoleDetails", model.RoleDetails ?? (object)DBNull.Value);
+
+                 await conn.OpenAsync();
+
+                 int rows = await cmd.ExecuteNonQueryAsync();
+
+                 return rows > 0;
+             }
+         }
+     }
+
+     catch(Exception ex)
+     {
+         throw new ApplicationException("Error Updating Roles Details", ex);
+     }
+ }
+
+
+Stored Procedure - 
+
+USE [SalesOrder31M]
+GO
+/****** Object:  StoredProcedure [dbo].[USP_GetAllJobTittles]    Script Date: 06-04-2026 11:34:35 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[USP_GetAllJobTittles]
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT JobTitle
+    FROM Users
+    WHERE JobTitle IS NOT NULL 
+          AND LTRIM(RTRIM(JobTitle)) <> ''
+    GROUP BY JobTitle
+    ORDER BY JobTitle
+END
+
+
+
+2 - 
+
+USE [SalesOrder31M]
+GO
+/****** Object:  StoredProcedure [dbo].[USP_UpdateRoleDetailsByJobTitle]    Script Date: 06-04-2026 11:36:19 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[USP_UpdateRoleDetailsByJobTitle]
+    @JobTitle NVARCHAR(200),
+    @RoleId INT,
+    @RoleDetails NVARCHAR(500)
+AS
+BEGIN
+    SET NOCOUNT OFF;
+
+    UPDATE dbo.Users
+    SET 
+        RoleId = @RoleId,
+        Role_Details = @RoleDetails,
+        Updated_At = GETDATE()
+    WHERE JobTitle = @JobTitle
+END

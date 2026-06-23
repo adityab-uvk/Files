@@ -1,0 +1,77 @@
+/****** Object:  StoredProcedure [dbo].[Update_NSMAPPROVAL_MASL]    Script Date: 6/23/2026 3:09:16 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[Update_NSMAPPROVAL_MASL]
+    @CompanyCode BIGINT,
+    @CreateOrderNumber BIGINT,
+    @Email NVARCHAR(120),
+    @UserId BIGINT,
+    @NSMName NVARCHAR(150),
+    @NSMCode NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @ErrorMessage NVARCHAR(MAX), @ErrorSeverity INT, @ErrorState INT;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        UPDATE TB_Create_Dealer_Order
+        SET
+            NSM_Approval = 1,
+            NSM_Approval_Date = GETDATE(),
+            NSMName = @NSMName,
+            NSMCode = @NSMCode,
+            SalesIndentStatus = 'ApprovedNSM'
+        WHERE
+            CompanyCode = @CompanyCode
+            AND CreateOrderNumber = @CreateOrderNumber
+            AND Email = @Email
+            AND UserId = @UserId
+            AND RMApproval = 1
+		   -- AND ISNULL(NSM_Approval, 0) = 0
+           -- AND Approve_From_C_AND_F = 1
+            AND ISNULL(OrderRejectStatus, 0) = 0;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT -1 AS ResultCode,
+                   'Order not eligible for NSM approval' AS Message;
+            RETURN;
+        END
+
+        COMMIT TRANSACTION;
+        SELECT 0 AS ResultCode, 'NSM approval successful' AS Message;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+
+        SET @ErrorMessage = ERROR_MESSAGE();
+        SET @ErrorSeverity = ERROR_SEVERITY();
+        SET @ErrorState = ERROR_STATE();
+
+        INSERT INTO Error_Log
+        (
+            ProcedureName,
+            ErrorMessage,
+            ErrorSeverity,
+            ErrorState,
+            ErrorDate
+        )
+        VALUES
+        (
+            'Update_NSMAPPROVAL_MASL',
+            @ErrorMessage,
+            @ErrorSeverity,
+            @ErrorState,
+            GETDATE()
+        );
+
+        SELECT -2 AS ResultCode, @ErrorMessage AS Message;
+    END CATCH
+END;

@@ -1,0 +1,65 @@
+/****** Object:  StoredProcedure [dbo].[Approve_From_Plant_MASL]    Script Date: 6/23/2026 3:07:49 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[Approve_From_Plant_MASL]
+	@CompanyCode BIGINT,
+	@CreateOrderNumber BIGINT,
+	@UserCode NVARCHAR(150)
+	AS
+BEGIN
+	SET NOCOUNT ON;
+    
+	DECLARE @ErrorMessage NVARCHAR(MAX), @ErrorSeverity INT, @ErrorState INT;
+    
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        
+        UPDATE O
+        SET 
+		O.RMApproval=1,
+		O.RMApproval_Date=GETDATE(),
+		O.RMCode=@UserCode,
+		O.RMName=U.Name,
+		O.SalesIndentStatus = 'ApprovedRM',
+
+            O.Approve_From_Plant = 0,
+            O.Approve_From_Plant_Request_Date = GETDATE(),
+            O.Approve_From_PlantUserCode ='25019858'  -- 23093391
+			FROM TB_Create_Dealer_Order O
+			INNER JOIN Users U
+			ON U.UserCode=@UserCode
+			--Approve_From_PlantUserRole=1
+        WHERE 
+            O.CompanyCode=@CompanyCode 
+            AND O.CreateOrderNumber=@CreateOrderNumber 
+            AND (O.SecondApprovalUserCode=@UserCode OR O.RepManCode=@UserCode);
+           
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT -1 AS ResultCode, 'No matching record found to update' AS Message;
+            RETURN;
+        END
+        
+        COMMIT TRANSACTION;
+        SELECT 0 AS ResultCode, 'Update successful' AS Message;
+    END TRY
+    BEGIN CATCH
+        ROLLBACK TRANSACTION;
+        
+        -- Capture error details
+        SET @ErrorMessage = ERROR_MESSAGE();
+        SET @ErrorSeverity = ERROR_SEVERITY();
+        SET @ErrorState = ERROR_STATE();
+
+        -- Log error details into an error log table
+        INSERT INTO Error_Log (ProcedureName, ErrorMessage, ErrorSeverity, ErrorState, ErrorDate)
+        VALUES ('Approve_From_Plant_MASL', @ErrorMessage, @ErrorSeverity, @ErrorState, GETDATE());
+
+        -- Return error details
+        SELECT -2 AS ResultCode, @ErrorMessage AS Message;
+    END CATCH;
+END;

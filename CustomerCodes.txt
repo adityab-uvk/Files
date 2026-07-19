@@ -1,0 +1,5 @@
+CompanyCode	SalesOrganisation	Dist_Channel	Division	Material_Number	Material_Description	Material_Type	Condition_Type	Number_of_the_Condition_Record	Condition_Amount	Condition_Unit	Unit_Of_Measurement	Customer_Number	Plant	Region	Deletion_Indicator	Valid_From	Valid_To	Pricing_Unit	Booking_Amount	Variety	Crop	Grade	ImagePath	Stage	Condition_Table	Material_Description_Lower	PackSize	Priority	ProductId	Id
+1054	MZ01	CS	29	ASPJYOTIM11	Potato Jyoti G Grade M11	HALB	ZB01	0213826287	17.00				MZ04	33		2026-07-01	2026-07-30	0	NULL		UNKNOWN	NULL	NULL	NULL	A706	potato jyoti g grade m11		NULL	NULL	52104
+1054	MZ01	CS	29	ASPJYOTIM11	Potato Jyoti G Grade M11	HALB	ZB01	0213826287	17.00				MZ04	33		2026-07-01	2026-07-30	0	NULL		UNKNOWN	NULL	NULL	NULL	A706	potato jyoti g grade m11		NULL	NULL	52106
+1054	MZ01		29	ASPJYOTIM11	Potato Jyoti G Grade M11	HALB	ZB01	0213824443	17.00			MPOT001814				2026-07-01	2026-07-30	0	NULL		UNKNOWN	NULL	NULL	NULL	A860	potato jyoti g grade m11		NULL	NULL	52103
+1054	MZ01		29	ASPJYOTIM11	Potato Jyoti G Grade M11	HALB	ZB01	0213824443	17.00			MPOT001814			X	2026-07-01	2026-07-30	0	NULL		UNKNOWN	NULL	NULL	NULL	A860	potato jyoti g grade m11		NULL	NULL	52105

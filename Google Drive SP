@@ -1,69 +1,110 @@
-ALTER PROCEDURE [dbo].[GetCustomerCodesByMaterial_A860]
-    @CompanyCode BIGINT,
-    @MaterialDescription NVARCHAR(200)
+/****** Object:  StoredProcedure [dbo].[GetValidPriceMasterForDropdown]    Script Date: 7/20/2026 1:07:05 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[GetValidPriceMasterForDropdown]
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @md_lower NVARCHAR(200);
+    DECLARE @Today DATE = CAST(GETDATE() AS DATE);
 
-    -- Normalize the material received from the API
-    SET @md_lower = LOWER(LTRIM(RTRIM(@MaterialDescription)));
-
-    /*
-        Special material-description exception:
-
-        Received:
-        POTATO JYOTI G G4 GRADE M11
-
-        Consider as:
-        POTATO JYOTI G GRADE M11
-    */
-    IF @CompanyCode = 1054
-       AND @md_lower = N'potato jyoti g g4 grade m11'
-    BEGIN
-        SET @md_lower = N'potato jyoti g grade m11';
-    END;
-
-    ;WITH d AS
+    ;WITH PriceMaster AS
     (
         SELECT DISTINCT
-            LTRIM(RTRIM(pm.Customer_Number)) AS CustomerCode,
-            COALESCE(
-                LTRIM(RTRIM(cm.CustomerName)),
-                ''
-            ) AS CustomerName
-        FROM dbo.TB_PriceMaster pm
-        LEFT JOIN dbo.TB_CustomerMaster cm
-            ON cm.CompanyCode = pm.CompanyCode
-           AND LTRIM(RTRIM(cm.CustomerCode))
-               = LTRIM(RTRIM(pm.Customer_Number))
-        WHERE pm.CompanyCode = @CompanyCode
-          AND pm.Condition_Table = 'A860'
-          AND
-          (
-              pm.Material_Description_Lower = @md_lower
-              OR LOWER(LTRIM(RTRIM(pm.Material_Description))) = @md_lower
-          )
-          AND
-          (
-              pm.Valid_From IS NULL
-              OR pm.Valid_From <= CAST(GETDATE() AS DATE)
-          )
-          AND
-          (
-              pm.Valid_To IS NULL
-              OR pm.Valid_To >= CAST(GETDATE() AS DATE)
-          )
-          AND pm.Customer_Number IS NOT NULL
-          AND LTRIM(RTRIM(pm.Customer_Number)) <> ''
+            CompanyCode,
+            Material_Description
+        FROM TB_PriceMaster
+        WHERE CompanyCode = 1054
+            AND ISNULL(Deletion_Indicator, '') <> 'X'
+            AND CAST(ISNULL(Valid_From, '1900-01-01') AS DATE) <= @Today
+            AND CAST(ISNULL(Valid_To, '9999-12-31') AS DATE) >= @Today
     )
+
     SELECT
-        CustomerCode,
-        CustomerName
-    FROM d
-    ORDER BY
-        CASE WHEN CustomerName = '' THEN 1 ELSE 0 END,
-        CustomerName,
-        CustomerCode;
-END;
+        PM.CompanyCode,
+        PM.Material_Description,
+
+        -- Variety
+        CASE
+            WHEN CleanDescription LIKE 'IVORY RUSSET%' THEN 'IVORY RUSSET'
+            WHEN CleanDescription LIKE 'RED X%' THEN 'RED X'
+            WHEN CleanDescription LIKE 'RESEARCH & DEVELOPMENT%' THEN 'RESEARCH & DEVELOPMENT'
+            ELSE LEFT(CleanDescription,
+                    CHARINDEX(' ', CleanDescription + ' ') - 1)
+        END AS Variety,
+
+        -- Product
+        CleanDescription AS Product,
+
+        -- Generation
+        CASE
+		WHEN UPPER(PM.Material_Description) LIKE 'POTATO JYOTI G GRADE%' THEN 'G4'
+            WHEN PM.Material_Description LIKE '% G1 %' THEN 'G1'
+            WHEN PM.Material_Description LIKE '% G2 %' THEN 'G2'
+            WHEN PM.Material_Description LIKE '% G3 %' THEN 'G3'
+            WHEN PM.Material_Description LIKE '% G4 %' THEN 'G4'
+            ELSE NULL
+        END AS Generation,
+
+        -- Grade
+        CASE
+            WHEN PM.Material_Description LIKE '%GRADE%'
+                THEN LTRIM(RTRIM(
+                    SUBSTRING(
+                        PM.Material_Description,
+                        CHARINDEX('GRADE', PM.Material_Description) + 5,
+                        50)))
+            WHEN PM.Material_Description LIKE '%-%'
+                THEN REPLACE(
+                        RIGHT(PM.Material_Description,
+                              CHARINDEX('-', REVERSE(PM.Material_Description)) - 1),
+                        ' ', '')
+            ELSE NULL
+        END AS Grade
+
+    FROM PriceMaster PM
+
+    CROSS APPLY
+    (
+        SELECT Description =
+            LTRIM(RTRIM(
+                REPLACE(
+                    REPLACE(PM.Material_Description,'POTATO ',''),
+                'Potato ','')
+            ))
+    ) A
+
+    CROSS APPLY
+    (
+        SELECT DescriptionWithoutGrade =
+            CASE
+                WHEN A.Description LIKE '%GRADE%'
+                THEN LEFT(A.Description,
+                    CHARINDEX('GRADE',A.Description)-1)
+                WHEN A.Description LIKE '%-%'
+                THEN LEFT(A.Description,
+                    CHARINDEX('-',A.Description)-1)
+                ELSE A.Description
+            END
+    ) B
+
+    CROSS APPLY
+    (
+        SELECT CleanDescription =
+            LTRIM(RTRIM(
+                REPLACE(
+                REPLACE(
+                REPLACE(
+                REPLACE(
+                    B.DescriptionWithoutGrade,
+                    ' G1',''),
+                    ' G2',''),
+                    ' G3',''),
+                    ' G4','')
+            ))
+    ) C;
+
+END

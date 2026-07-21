@@ -1,10 +1,39 @@
-Plant	State
-MZ01	Punjab
-MZ02	Punjab
-MZ03	Himachal Pradesh
-MZ04	Punjab
-MZ05	Gujarat
-MZ06	Madhya Pradesh
-MZ07	Haryana
-MZ08	Uttar Pradesh
-MZ09	West Bengal
+RegionCode	StateName
+01	Andhra Pradesh
+02	Arunachal Pradesh
+03	Assam
+04	Bihar
+05	Goa
+06	Gujarat
+07	Haryana
+08	Himachal Pradesh
+09	Jammu and Kashmir
+10	Karnataka
+11	Kerala
+12	Madhya Pradesh
+13	Maharashtra
+14	Manipur
+15	Meghalaya
+16	Mizoram
+17	Nagaland
+18	Odisha
+19	Punjab
+20	Rajasthan
+21	Sikkim
+22	Tamil Nadu
+23	Tripura
+24	Uttar Pradesh
+26	Andaman and Nicobar
+27	Chandigarh
+28	Dadra and Nagar Hav.
+29	Daman and Diu
+30	Delhi
+31	Lakshadweep
+32	Pondicherry
+33	Chhattisgarh
+34	Jharkhand
+35	Uttarakhand
+36	Telangana
+37	North East India
+38	Ladakh
+25	West Bengal

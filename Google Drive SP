@@ -1,39 +1,71 @@
-RegionCode	StateName
-01	Andhra Pradesh
-02	Arunachal Pradesh
-03	Assam
-04	Bihar
-05	Goa
-06	Gujarat
-07	Haryana
-08	Himachal Pradesh
-09	Jammu and Kashmir
-10	Karnataka
-11	Kerala
-12	Madhya Pradesh
-13	Maharashtra
-14	Manipur
-15	Meghalaya
-16	Mizoram
-17	Nagaland
-18	Odisha
-19	Punjab
-20	Rajasthan
-21	Sikkim
-22	Tamil Nadu
-23	Tripura
-24	Uttar Pradesh
-26	Andaman and Nicobar
-27	Chandigarh
-28	Dadra and Nagar Hav.
-29	Daman and Diu
-30	Delhi
-31	Lakshadweep
-32	Pondicherry
-33	Chhattisgarh
-34	Jharkhand
-35	Uttarakhand
-36	Telangana
-37	North East India
-38	Ladakh
-25	West Bengal
+DECLARE @ManagerUserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    -- Direct users under 25033410
+    SELECT
+        U.UserId,
+        U.UserCode,
+        U.CompanyCode,
+        U.UserType,
+        U.Name,
+        U.FirstName,
+        U.LastName,
+        U.Email,
+        U.ContactNumber,
+        U.RepManCode,
+        U.RoleId,
+        U.Role_Details,
+        U.JobTitle,
+        U.Location,
+        U.IsActive,
+        1 AS HierarchyLevel
+    FROM Users U
+    WHERE U.RepManCode = @ManagerUserCode
+      AND U.IsActive = 1
+
+    UNION ALL
+
+    -- Users reporting under previously found users
+    SELECT
+        U.UserId,
+        U.UserCode,
+        U.CompanyCode,
+        U.UserType,
+        U.Name,
+        U.FirstName,
+        U.LastName,
+        U.Email,
+        U.ContactNumber,
+        U.RepManCode,
+        U.RoleId,
+        U.Role_Details,
+        U.JobTitle,
+        U.Location,
+        U.IsActive,
+        UH.HierarchyLevel + 1
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+        AND U.CompanyCode = UH.CompanyCode
+    WHERE U.IsActive = 1
+)
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    Name,
+    FirstName,
+    LastName,
+    Email,
+    ContactNumber,
+    RepManCode,
+    RoleId,
+    Role_Details,
+    JobTitle,
+    Location,
+    IsActive,
+    HierarchyLevel
+FROM UserHierarchy
+ORDER BY CompanyCode, HierarchyLevel, UserCode
+OPTION (MAXRECURSION 100);

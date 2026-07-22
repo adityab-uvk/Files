@@ -98,32 +98,34 @@ BEGIN
     SET @A860GenerationForMatch = 'G';
     SET @A860GradeForMatch = 'M11';
 END
-
 ------------------------------------------------------------------------
 -- A706 special exception
 --
 -- Frontend:
 -- Variety    = Jyoti G
 -- Product    = Potato Jyoti G
--- Generation = M11
--- Grade      = G4
+-- Generation = G4
+-- Grade      = M11
 --
 -- PriceMaster:
 -- Potato Jyoti G Grade M11
 --
--- For this combination, G4 should match G.
+-- For this combination, Generation G4 should match material value G.
 ------------------------------------------------------------------------
+DECLARE @A706GenerationForMatch VARCHAR(10)
+    = LTRIM(RTRIM(@Generation));
+
 DECLARE @A706GradeForMatch VARCHAR(10)
     = LTRIM(RTRIM(@Grade));
 
 IF UPPER(LTRIM(RTRIM(@Variety))) = 'JYOTI G'
    AND UPPER(LTRIM(RTRIM(@Product))) = 'POTATO JYOTI G'
-   AND UPPER(LTRIM(RTRIM(@Generation))) = 'M11'
-   AND UPPER(LTRIM(RTRIM(@Grade))) = 'G4'
+   AND UPPER(LTRIM(RTRIM(@Generation))) = 'G4'
+   AND UPPER(LTRIM(RTRIM(@Grade))) = 'M11'
 BEGIN
-    SET @A706GradeForMatch = 'G';
+    SET @A706GenerationForMatch = 'G';
+    SET @A706GradeForMatch = 'M11';
 END
-
         ------------------------------------------------------------------------
         -- Case 1: A860 (customer-wise) if CustomerCode provided
         ------------------------------------------------------------------------
@@ -188,8 +190,8 @@ AND (' ' + pm.Material_Description + ' ')
               AND pm.Material_Description LIKE '%' + @Variety + '%'
               AND pm.Material_Description LIKE '%' + @Product + '%'
               -- strict match for Generation & Grade
-              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Generation + ' %'
-             AND (' ' + pm.Material_Description + ' ')  LIKE '% ' + @A706GradeForMatch + ' %'
+            AND (' ' + pm.Material_Description + ' ')   LIKE '% ' + @A706GenerationForMatch + ' %'
+             AND (' ' + pm.Material_Description + ' ')  LIKE '% ' + @Grade + ' %'
               AND (pm.Valid_From IS NULL OR pm.Valid_From <= @AsOfDate)
               AND (pm.Valid_To   IS NULL OR pm.Valid_To   >= @AsOfDate)
             ORDER BY pm.Id DESC;

@@ -71,6 +71,35 @@ BEGIN
         DECLARE @HasEx   BIT = CASE WHEN @ExState          IS NOT NULL THEN 1 ELSE 0 END;
 
         ------------------------------------------------------------------------
+-- A860 special exception
+--
+-- Frontend sends:
+-- Variety    = Jyoti
+-- Product    = Jyoti G
+-- Generation = G4
+-- Grade      = M11
+--
+-- PriceMaster material:
+-- Potato Jyoti G Grade M11
+--
+-- For this combination, match frontend G4 with material G.
+------------------------------------------------------------------------
+DECLARE @A860GenerationForMatch VARCHAR(10)
+    = LTRIM(RTRIM(@Generation));
+
+DECLARE @A860GradeForMatch VARCHAR(10)
+    = LTRIM(RTRIM(@Grade));
+
+IF UPPER(LTRIM(RTRIM(@Variety))) = 'JYOTI'
+   AND UPPER(LTRIM(RTRIM(@Product))) = 'JYOTI G'
+   AND UPPER(LTRIM(RTRIM(@Generation))) = 'G4'
+   AND UPPER(LTRIM(RTRIM(@Grade))) = 'M11'
+BEGIN
+    SET @A860GenerationForMatch = 'G';
+    SET @A860GradeForMatch = 'M11';
+END
+
+        ------------------------------------------------------------------------
         -- Case 1: A860 (customer-wise) if CustomerCode provided
         ------------------------------------------------------------------------
         IF (@HasCust = 1)
@@ -83,8 +112,11 @@ BEGIN
               AND pm.Material_Description LIKE '%' + @Variety + '%'
               AND pm.Material_Description LIKE '%' + @Product + '%'
               -- strict match for Generation & Grade
-              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Generation + ' %'
-              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Grade + ' %'
+             AND (' ' + pm.Material_Description + ' ')
+    LIKE '% ' + @A860GenerationForMatch + ' %'
+
+AND (' ' + pm.Material_Description + ' ')
+    LIKE '% ' + @A860GradeForMatch + ' %'
               AND LTRIM(RTRIM(pm.Customer_Number)) = @CustomerCode
               AND (pm.Valid_From IS NULL OR pm.Valid_From <= @AsOfDate)
               AND (pm.Valid_To   IS NULL OR pm.Valid_To   >= @AsOfDate)

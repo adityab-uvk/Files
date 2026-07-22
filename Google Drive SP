@@ -1,2 +1,1 @@
-Id	CustomerCode	OrderNumber	ProductId	ItemId	PriceCardType	PricePerKg	BookingPrice	BookedQty	BookingAmtPaid	BalanceAmtToPay	BalanceQuantity	DispatchStatus	RequestForQuantityMT	AmountRequiredToDispatch	BookingAmountReceived	BalanceAmount	FromDate	ToDate	DispatchAddress	CreatedOn
-1	MPOT000189	8	1	0	Single	16.00	10.00	15	50000.00	90000.00	5	Partial	10.00	160000.00	100000.00	60000.00	2026-01-24	2026-01-31	ABB Signal	2026-01-24 13:33:40.403
+https://drive.google.com/file/d/16jfeksqceKLvpI8ryWY7lpGQUm3CW-qi/view?usp=sharing

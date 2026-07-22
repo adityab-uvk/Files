@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[GetConditionAmount]    Script Date: 7/22/2026 4:39:20 PM ******/
+/****** Object:  StoredProcedure [dbo].[GetConditionAmount]    Script Date: 7/22/2026 6:08:45 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -115,16 +115,14 @@ END
 DECLARE @A706GenerationForMatch VARCHAR(10)
     = LTRIM(RTRIM(@Generation));
 
-DECLARE @A706GradeForMatch VARCHAR(10)
-    = LTRIM(RTRIM(@Grade));
 
 IF UPPER(LTRIM(RTRIM(@Variety))) = 'JYOTI G'
-   AND UPPER(LTRIM(RTRIM(@Product))) = 'POTATO JYOTI G'
+   AND UPPER(LTRIM(RTRIM(@Product))) = 'JYOTI G'
    AND UPPER(LTRIM(RTRIM(@Generation))) = 'G4'
    AND UPPER(LTRIM(RTRIM(@Grade))) = 'M11'
 BEGIN
     SET @A706GenerationForMatch = 'G';
-    SET @A706GradeForMatch = 'M11';
+
 END
         ------------------------------------------------------------------------
         -- Case 1: A860 (customer-wise) if CustomerCode provided

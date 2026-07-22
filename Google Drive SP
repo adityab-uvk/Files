@@ -1,2 +1,150 @@
-CompanyCode	SalesOrganisation	Dist_Channel	Division	Material_Number	Material_Description	Material_Type	Condition_Type	Number_of_the_Condition_Record	Condition_Amount	Condition_Unit	Unit_Of_Measurement	Customer_Number	Plant	Region	Deletion_Indicator	Valid_From	Valid_To	Pricing_Unit	Booking_Amount	Variety	Crop	Grade	ImagePath	Stage	Condition_Table	Material_Description_Lower	PackSize	Priority	ProductId	Id
-1054	MZ01		29	ASPJYOTIM11	Potato Jyoti G Grade M11	HALB	ZB01	0213824443	17.00			MPOT001814				2026-07-01	2026-07-30	0	NULL		UNKNOWN	NULL	NULL	NULL	A860	potato jyoti g grade m11		NULL	NULL	52103
+/****** Object:  StoredProcedure [dbo].[GetConditionAmount]    Script Date: 7/22/2026 4:39:20 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[GetConditionAmount]
+    @CompanyCode        VARCHAR(10),
+    @Variety            VARCHAR(50),
+    @Product            VARCHAR(100),
+    @Generation         VARCHAR(10),
+    @Grade              VARCHAR(10),
+    @DestinationState   VARCHAR(100) = NULL,   -- A706: Dest → RegionCode
+    @CustomerCode       VARCHAR(50)  = NULL,   -- A860: customer-wise
+    @ExState            VARCHAR(100) = NULL    -- A706: ExState → Plant(s) via TB_Plant_State
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @FinalConditionAmount DECIMAL(18,2) = NULL;
+    DECLARE @AsOfDate DATE = CONVERT(DATE, GETDATE());
+
+    ----------------------------------------------------------------------------
+    -- 1049: UNCHANGED (original priority logic)
+    ----------------------------------------------------------------------------
+    IF @CompanyCode = '1049'
+    BEGIN
+        DECLARE @ConditionTablePriority TABLE (PriorityOrder INT, ConditionTable NVARCHAR(5));
+        INSERT INTO @ConditionTablePriority (PriorityOrder, ConditionTable)
+        VALUES (1,'A860'),(2,'A935'),(3,'A933'),(4,'A862'),(5,'A559');
+
+        SELECT TOP 1 @FinalConditionAmount =
+            CASE
+                WHEN bag.Condition_Amount IS NOT NULL AND dis.Condition_Amount IS NOT NULL
+                     THEN bag.Condition_Amount - (bag.Condition_Amount * dis.Condition_Amount / 100)
+                ELSE bag.Condition_Amount
+            END
+        FROM @ConditionTablePriority ctp
+        JOIN TB_PriceMaster bag WITH (INDEX(IDX_TB_PriceMaster_Search))
+            ON bag.Condition_Table = ctp.ConditionTable
+           AND bag.CompanyCode     = @CompanyCode
+           AND bag.Condition_Type  = 'ZBAG'
+           AND bag.Material_Description LIKE '%' + @Variety + '%'
+           AND bag.Material_Description LIKE '%' + @Product + '%'
+           -- strict (word-like) match for Generation & Grade
+           AND (' ' + bag.Material_Description + ' ') LIKE '% ' + @Generation + ' %'
+           AND (' ' + bag.Material_Description + ' ') LIKE '% ' + @Grade + ' %'
+        LEFT JOIN TB_PriceMaster dis WITH (INDEX(IDX_TB_PriceMaster_Search))
+            ON dis.Material_Number  = bag.Material_Number
+           AND dis.Condition_Table  = bag.Condition_Table
+           AND dis.Condition_Type   = 'ZDIS'
+           AND dis.Region           = @DestinationState
+        ORDER BY ctp.PriorityOrder;
+
+        SELECT ISNULL(@FinalConditionAmount, 0) AS FinalConditionAmount;
+        RETURN;
+    END
+
+    ----------------------------------------------------------------------------
+    -- 1054: ONLY A860 (customer) OR A706 (plant+region)
+    ----------------------------------------------------------------------------
+    IF @CompanyCode = '1054'
+    BEGIN
+        -- Normalize once
+        SET @DestinationState = NULLIF(LTRIM(RTRIM(@DestinationState)), '');
+        SET @CustomerCode     = NULLIF(LTRIM(RTRIM(@CustomerCode)),     '');
+        SET @ExState          = NULLIF(LTRIM(RTRIM(@ExState)),          '');
+
+        DECLARE @HasDest BIT = CASE WHEN @DestinationState IS NOT NULL THEN 1 ELSE 0 END;
+        DECLARE @HasCust BIT = CASE WHEN @CustomerCode     IS NOT NULL THEN 1 ELSE 0 END;
+        DECLARE @HasEx   BIT = CASE WHEN @ExState          IS NOT NULL THEN 1 ELSE 0 END;
+
+        ------------------------------------------------------------------------
+        -- Case 1: A860 (customer-wise) if CustomerCode provided
+        ------------------------------------------------------------------------
+        IF (@HasCust = 1)
+        BEGIN
+            SELECT TOP 1 @FinalConditionAmount = pm.Condition_Amount
+            FROM TB_PriceMaster pm WITH (INDEX(IDX_TB_PriceMaster_Search))
+            WHERE pm.CompanyCode       = @CompanyCode
+              AND pm.Condition_Table   = 'A860'
+              AND pm.Condition_Type    = 'ZB01'
+              AND pm.Material_Description LIKE '%' + @Variety + '%'
+              AND pm.Material_Description LIKE '%' + @Product + '%'
+              -- strict match for Generation & Grade
+              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Generation + ' %'
+              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Grade + ' %'
+              AND LTRIM(RTRIM(pm.Customer_Number)) = @CustomerCode
+              AND (pm.Valid_From IS NULL OR pm.Valid_From <= @AsOfDate)
+              AND (pm.Valid_To   IS NULL OR pm.Valid_To   >= @AsOfDate)
+            ORDER BY pm.Id DESC;
+
+            SELECT ISNULL(@FinalConditionAmount, 0) AS FinalConditionAmount;
+            RETURN;
+        END
+
+        ------------------------------------------------------------------------
+        -- Case 2: A706 (plant + region) requires BOTH ExState and DestinationState
+        ------------------------------------------------------------------------
+        IF (@HasEx = 1 AND @HasDest = 1)
+        BEGIN
+            -- Build Plant list from ExState once
+            DECLARE @PlantMap TABLE (Plant NVARCHAR(10) PRIMARY KEY);
+            INSERT INTO @PlantMap(Plant)
+            SELECT ps.Plant
+            FROM dbo.TB_Plant_State ps
+            WHERE LTRIM(RTRIM(ps.State)) = @ExState;
+
+            -- Resolve RegionCode from DestinationState
+            DECLARE @RegionCode NVARCHAR(10) = NULL;
+            SELECT @RegionCode = srm.RegionCode
+            FROM dbo.TB_StateRegionMap srm
+            WHERE LTRIM(RTRIM(srm.StateName)) = @DestinationState;
+
+            -- If no mapped plants or region, nothing can match
+            IF NOT EXISTS (SELECT 1 FROM @PlantMap) OR @RegionCode IS NULL
+            BEGIN
+                SELECT CAST(0.00 AS DECIMAL(18,2)) AS FinalConditionAmount;
+                RETURN;
+            END
+
+            -- A706: Plant + Region
+            SELECT TOP 1 @FinalConditionAmount = pm.Condition_Amount
+            FROM TB_PriceMaster pm WITH (INDEX(IDX_TB_PriceMaster_Search))
+            INNER JOIN @PlantMap p
+                ON p.Plant = pm.Plant
+            WHERE pm.CompanyCode       = @CompanyCode
+              AND pm.Condition_Table   = 'A706'
+              AND pm.Condition_Type    = 'ZB01'
+              AND pm.Region            = @RegionCode
+              AND pm.Material_Description LIKE '%' + @Variety + '%'
+              AND pm.Material_Description LIKE '%' + @Product + '%'
+              -- strict match for Generation & Grade
+              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Generation + ' %'
+              AND (' ' + pm.Material_Description + ' ') LIKE '% ' + @Grade + ' %'
+              AND (pm.Valid_From IS NULL OR pm.Valid_From <= @AsOfDate)
+              AND (pm.Valid_To   IS NULL OR pm.Valid_To   >= @AsOfDate)
+            ORDER BY pm.Id DESC;
+
+            SELECT ISNULL(@FinalConditionAmount, 0) AS FinalConditionAmount;
+            RETURN;
+        END
+
+        ------------------------------------------------------------------------
+        -- Otherwise (missing ExState or DestinationState): no match
+        ------------------------------------------------------------------------
+        SELECT CAST(0.00 AS DECIMAL(18,2)) AS FinalConditionAmount;
+        RETURN;
+    END
+END

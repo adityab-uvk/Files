@@ -1,1 +1,5 @@
-https://drive.google.com/file/d/16jfeksqceKLvpI8ryWY7lpGQUm3CW-qi/view?usp=sharing
+CompanyCode	SalesOrganisation	Dist_Channel	Division	Material_Number	Material_Description	Material_Type	Condition_Type	Number_of_the_Condition_Record	Condition_Amount	Condition_Unit	Unit_Of_Measurement	Customer_Number	Plant	Region	Deletion_Indicator	Valid_From	Valid_To	Pricing_Unit	Booking_Amount	Variety	Crop	Grade	ImagePath	Stage	Condition_Table	Material_Description_Lower	PackSize	Priority	ProductId	Id
+1049	AG01		VG	CS05190404	OKRA MO66 PACK SEED 100G	FERT	ZBAG	0212397040	4000.00	INR	KG					2026-05-25	2026-09-30	1	NULL	MO66	OKRA SEEDS	NULL	NULL	NULL	A559	okra mo66 pack seed 100g	100G	NULL	NULL	52108
+1049	AG01		VG	CS05190404	OKRA MO66 PACK SEED 100G	FERT	ZDIS	0212397047	-120.00	%						2026-05-25	2026-09-30	0	NULL	MO66	OKRA SEEDS	NULL	NULL	NULL	A559	okra mo66 pack seed 100g	100G	NULL	NULL	52111
+1049	AG01		VG	CS05190407	OKRA MO66 PACK SEED 250G	FERT	ZBAG	0212397041	4000.00	INR	KG					2026-05-25	2026-09-30	1	NULL	MO66	OKRA SEEDS	NULL	NULL	NULL	A559	okra mo66 pack seed 250g	250G	NULL	NULL	52109
+1049	AG01		VG	CS05190407	OKRA MO66 PACK SEED 250G	FERT	ZDIS	0212397048	-120.00	%						2026-05-25	2026-09-30	0	NULL	MO66	OKRA SEEDS	NULL	NULL	NULL	A559	okra mo66 pack seed 250g	250G	NULL	NULL	52112

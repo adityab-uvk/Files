@@ -1,14 +1,284 @@
-TM
-00000000
-23147299
-23179171
-25001779
-25005079
-25007100
-25010844
-25017061
-25018655
-25019412
-25019925
-25032173
-string
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    RoleId,
+    RepManCode,
+    IsActive,
+    Name
+FROM Users
+WHERE UserCode = @UserCode;
+
+----------------------------------------------------------------------------------------------------
+
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT
+        U.UserCode,
+        U.RepManCode,
+        U.RoleId,
+        U.CompanyCode,
+        0 AS HierarchyLevel
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT
+        U.UserCode,
+        U.RepManCode,
+        U.RoleId,
+        U.CompanyCode,
+        UH.HierarchyLevel + 1
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+)
+SELECT *
+FROM UserHierarchy
+ORDER BY HierarchyLevel, UserCode
+OPTION (MAXRECURSION 100);
+
+
+-------------------------------------------------------------------------------------------------
+
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT
+        U.UserCode,
+        U.RepManCode,
+        U.RoleId,
+        U.CompanyCode
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT
+        U.UserCode,
+        U.RepManCode,
+        U.RoleId,
+        U.CompanyCode
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+)
+SELECT DISTINCT
+    CM.CompanyCode,
+    CM.CustomerCode,
+    CM.CustomerName,
+    CM.TM,
+    CM.Emp_Name,
+    CM.Plant
+FROM TB_CustomerMaster CM
+WHERE CM.TM IN
+(
+    SELECT UserCode
+    FROM UserHierarchy
+)
+ORDER BY CM.TM, CM.CustomerCode
+OPTION (MAXRECURSION 100);
+
+
+-----------------------------------------------------------------------------------
+
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT U.UserCode
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT U.UserCode
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+),
+AllowedCustomers AS
+(
+    SELECT DISTINCT
+        CM.CustomerCode,
+        CM.CustomerName,
+        CM.TM,
+        CM.CompanyCode
+    FROM TB_CustomerMaster CM
+    WHERE CM.TM IN
+    (
+        SELECT UserCode
+        FROM UserHierarchy
+    )
+)
+SELECT
+    AC.CompanyCode,
+    AC.TM,
+    AC.CustomerCode,
+    AC.CustomerName,
+    O.OrderNumber,
+    O.BillingAddress,
+    O.ShippingAddress
+FROM AllowedCustomers AC
+LEFT JOIN OrdersMHZPC O
+    ON O.CustomerCode = AC.CustomerCode
+ORDER BY AC.CustomerCode, O.OrderNumber
+OPTION (MAXRECURSION 100);
+
+
+--------------------------------------------------------------
+
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT U.UserCode
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT U.UserCode
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+),
+AllowedCustomers AS
+(
+    SELECT DISTINCT CM.CustomerCode
+    FROM TB_CustomerMaster CM
+    WHERE CM.TM IN
+    (
+        SELECT UserCode
+        FROM UserHierarchy
+    )
+)
+SELECT
+    O.CustomerCode,
+    O.OrderNumber,
+    DO.ProductId,
+    DO.PriceCardType,
+    DO.ProductName,
+    DO.DispatchStatus,
+    DO.TMApproval,
+    DO.HAApproval,
+    DO.PrimaryDispatchStatus,
+    DO.SecondaryDispatchStatus,
+    DO.TMUserCode,
+    DO.HAUserCode
+FROM OrdersMHZPC O
+INNER JOIN DealerOrderMHZPC DO
+    ON DO.OrderNumber = O.OrderNumber
+WHERE O.CustomerCode IN
+(
+    SELECT CustomerCode
+    FROM AllowedCustomers
+)
+ORDER BY O.CustomerCode, O.OrderNumber
+OPTION (MAXRECURSION 100);
+
+
+------------------------------------------------------------------------------------------------
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT U.UserCode
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT U.UserCode
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+),
+AllowedCustomers AS
+(
+    SELECT DISTINCT CM.CustomerCode
+    FROM TB_CustomerMaster CM
+    WHERE CM.TM IN
+    (
+        SELECT UserCode
+        FROM UserHierarchy
+    )
+)
+SELECT
+    O.CustomerCode,
+    O.OrderNumber,
+    DO.ProductId,
+    DO.ProductName,
+    DO.PriceCardType,
+    DO.DispatchStatus,
+    DO.TMApproval,
+    DO.HAApproval,
+    DO.PrimaryDispatchStatus,
+    DO.SecondaryDispatchStatus
+FROM OrdersMHZPC O
+INNER JOIN DealerOrderMHZPC DO
+    ON DO.OrderNumber = O.OrderNumber
+WHERE O.CustomerCode IN
+(
+    SELECT CustomerCode
+    FROM AllowedCustomers
+)
+AND DO.DispatchStatus = 'Pending'
+AND
+(
+       (DO.TMApproval = 'Approved' AND DO.HAApproval = 'Pending')
+    OR (DO.TMApproval = 'Pending' AND DO.HAApproval = 'Approved')
+    OR (DO.TMApproval = 'Pending' AND DO.HAApproval = 'Pending')
+)
+ORDER BY O.CustomerCode, O.OrderNumber
+OPTION (MAXRECURSION 100);
+
+
+---------------------------------------------------------------------------------------------------
+
+DECLARE @UserCode NVARCHAR(50) = '25033410';
+
+;WITH UserHierarchy AS
+(
+    SELECT U.UserCode
+    FROM Users U
+    WHERE U.UserCode = @UserCode
+
+    UNION ALL
+
+    SELECT U.UserCode
+    FROM Users U
+    INNER JOIN UserHierarchy UH
+        ON U.RepManCode = UH.UserCode
+),
+AllowedCustomers AS
+(
+    SELECT DISTINCT CM.CustomerCode
+    FROM TB_CustomerMaster CM
+    WHERE CM.TM IN
+    (
+        SELECT UserCode
+        FROM UserHierarchy
+    )
+)
+SELECT DISTINCT
+    '[' + ISNULL(DO.DispatchStatus, 'NULL') + ']' AS DispatchStatus,
+    '[' + ISNULL(DO.TMApproval, 'NULL') + ']' AS TMApproval,
+    '[' + ISNULL(DO.HAApproval, 'NULL') + ']' AS HAApproval
+FROM OrdersMHZPC O
+INNER JOIN DealerOrderMHZPC DO
+    ON DO.OrderNumber = O.OrderNumber
+WHERE O.CustomerCode IN
+(
+    SELECT CustomerCode
+    FROM AllowedCustomers
+)
+OPTION (MAXRECURSION 100);
+
+

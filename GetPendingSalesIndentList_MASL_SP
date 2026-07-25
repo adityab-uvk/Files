@@ -1,0 +1,195 @@
+ALTER PROCEDURE [dbo].[GetPendingSalesIndentList_MASL]
+    @CompanyCode BIGINT,
+    @UserCode NVARCHAR(50),
+    @RoleId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+	
+    BEGIN TRY
+
+    DECLARE @PendingOrders TABLE
+        (
+            CompanyCode BIGINT,
+            CreateOrderNumber BIGINT,
+            CartId BIGINT
+        );
+      
+	  IF @RoleId = 1 -- for Dealer Login 
+        BEGIN
+
+            -- Step 1: Insert matching orders into table variable
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode=@CompanyCode
+                AND UserCode=@UserCode
+                AND SONumber IS NULL
+                --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+
+            SELECT 
+               *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode=@CompanyCode
+                AND UserCode=@UserCode
+				 AND SONumber IS NULL
+           		--AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))  
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)  
+            ORDER BY CreateOrderNumber DESC;
+        END 
+      
+	  ELSE IF @RoleId IN (2,3,4) -- for Dealer TM, RM, ZM
+		BEGIN
+
+        INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+              AND (RepManCode = @UserCode
+               OR SecondApprovalUserCode = @UserCode
+               OR ZSMCode = @UserCode)
+               AND SONumber IS NULL
+               --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))
+               AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+            SELECT 
+             *
+		    FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+ 
+            AND (RepManCode = @UserCode OR SecondApprovalUserCode=@UserCode OR ZSMCode=@UserCode )
+            AND SONumber IS NULL
+ 	        --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))  
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL) 
+                ORDER BY CreateOrderNumber DESC;
+        END
+
+		 ELSE IF @RoleId = 5   -- NSM
+        BEGIN
+
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+         -- AND NSMCode = @UserCode
+         -- AND Approve_From_C_AND_F = 1
+         -- AND NSM_Approval = 0
+         -- AND RMApproval = 1
+            AND SONumber IS NULL
+            AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+
+            SELECT *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+             -- AND NSMCode = @UserCode
+             -- AND Approve_From_C_AND_F = 1
+             -- AND NSM_Approval = 0
+             -- AND RMApproval = 1
+			   AND SONumber IS NULL
+              AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)
+            ORDER BY CreateOrderNumber DESC;
+        END
+
+        /* ============================
+           4. BHM – Plant Flow Only
+        ============================ */
+        ELSE IF @RoleId = 6   -- BHM
+        BEGIN
+
+        
+        INSERT INTO @PendingOrders
+        SELECT CompanyCode, CreateOrderNumber, CartId
+        FROM TB_Create_Dealer_Order
+        WHERE CompanyCode = @CompanyCode
+     -- AND BHM_Reporting_Code = @UserCode
+     -- AND Approve_From_Plant = 1
+     -- AND BHM_Approval = 0
+     -- AND RMApproval = 1
+       AND SONumber IS NULL
+       AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+
+            SELECT *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+            --  AND BHM_Reporting_Code = @UserCode
+             -- AND Approve_From_Plant = 1
+             -- AND BHM_Approval = 0
+             -- AND RMApproval = 1
+			   AND SONumber IS NULL
+              AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)
+            ORDER BY CreateOrderNumber DESC;
+        END
+
+
+
+
+
+        ELSE IF @RoleId IN (7,8,9) -- for Top Management Roles Login
+        BEGIN
+
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+             -- AND BHM_Reporting_Code = @UserCode
+             -- AND Approve_From_Plant = 1
+             -- AND BHM_Approval = 0
+             -- AND RMApproval = 1
+           AND SONumber IS NULL
+           AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+            SELECT 
+               *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+                	--AND  (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0)
+					--  OR (Approve_From_C_AND_F = 1 AND RMApproval = 1 AND NSM_Approval = 0)
+                    --OR (Approve_From_Plant = 1 AND RMApproval = 1 AND BHM_Approval = 0))
+                AND SONumber IS NULL
+					
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL) 
+                ORDER BY CreateOrderNumber DESC;
+        END 
+	       ELSE
+        BEGIN
+            PRINT 'Invalid User Role. No data found.';
+        END
+
+        SELECT
+            p.CreateOrderNumber,
+            i.CartId,
+            i.Material_Code,
+            i.Material_Description,
+            i.Quantity
+            FROM @PendingOrders p
+            INNER JOIN TB_Cart_Items i
+            ON p.CartId = i.CartId
+            AND p.CompanyCode = i.CompanyCode
+            ORDER BY p.CreateOrderNumber DESC, i.SrNo;
+
+    END TRY
+
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        DECLARE @ErrorLine INT = ERROR_LINE();
+        DECLARE @ErrorProcedure NVARCHAR(200) = ERROR_PROCEDURE();
+        
+        -- Insert error details into the error log table
+        INSERT INTO Error_Log (ErrorMessage, ErrorSeverity, ErrorState, ErrorLine, ErrorProcedure, ErrorDateTime)
+        VALUES (@ErrorMessage, @ErrorSeverity, @ErrorState, @ErrorLine, @ErrorProcedure, GETDATE());
+        
+        PRINT 'Error occurred in GetPendingSalesIndentList_MASL';
+        PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS NVARCHAR(10));
+        PRINT 'Error Message: ' + @ErrorMessage;
+        PRINT 'Error Severity: ' + CAST(@ErrorSeverity AS NVARCHAR(10));
+        PRINT 'Error State: ' + CAST(@ErrorState AS NVARCHAR(10));
+        PRINT 'Error Line: ' + CAST(@ErrorLine AS NVARCHAR(10));
+        PRINT 'Error Procedure: ' + ISNULL(@ErrorProcedure, 'N/A');
+    END CATCH;
+END

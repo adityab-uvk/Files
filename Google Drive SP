@@ -1,64 +1,35 @@
-
-
-SELECT DISTINCT
-    CM.TM AS TMCode,
-    CM.CompanyCode AS CustomerMasterCompanyCode,
-    U.CompanyCode AS UsersCompanyCode,
-    U.Name AS UserName,
-    U.RoleId,
-    U.IsActive,
-    U.RepManCode,
-    CASE
-        WHEN U.UserCode IS NULL THEN 'TM not found in Users'
-        WHEN U.CompanyCode <> CM.CompanyCode THEN 'CompanyCode mismatch'
-        ELSE 'Correct'
-    END AS Issue
-FROM TB_CustomerMaster CM
-LEFT JOIN Users U
-    ON LTRIM(RTRIM(U.UserCode)) = LTRIM(RTRIM(CM.TM))
-WHERE NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
-  AND
-  (
-      U.UserCode IS NULL
-      OR U.CompanyCode <> CM.CompanyCode
-  )
-ORDER BY
-    CM.TM,
-    CM.CompanyCode,
-    U.CompanyCode;
-
-
--------------------------------------------------------------------------------------
 DECLARE @CompanyCode BIGINT = 1054;
 
 SELECT DISTINCT
     CM.TM AS TMCode,
+    CM.Emp_Name AS CustomerMasterEmployeeName,
     CM.CompanyCode AS CustomerMasterCompanyCode,
-    U.CompanyCode AS UsersCompanyCode,
-    U.Name AS UserName,
-    U.RoleId,
-    U.IsActive,
-    U.RepManCode,
+    CM.Plant,
+    CM.Region,
+    CM.RegionDescription,
+    CM.SalesOffice,
+    CM.SalesGroup,
     CASE
-        WHEN U.UserCode IS NULL THEN 'TM not found in Users'
-        WHEN U.CompanyCode <> CM.CompanyCode THEN 'CompanyCode mismatch'
-        ELSE 'Correct'
+        WHEN NOT EXISTS
+        (
+            SELECT 1
+            FROM Users U
+            WHERE LTRIM(RTRIM(U.UserCode)) =
+                  LTRIM(RTRIM(CM.TM))
+        )
+        THEN 'TM does not exist in Users'
+
+        ELSE 'TM exists in Users under another CompanyCode'
     END AS Issue
 FROM TB_CustomerMaster CM
-LEFT JOIN Users U
-    ON LTRIM(RTRIM(U.UserCode)) = LTRIM(RTRIM(CM.TM))
 WHERE CM.CompanyCode = @CompanyCode
   AND NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
-  AND
+  AND NOT EXISTS
   (
-      U.UserCode IS NULL
-      OR U.CompanyCode <> CM.CompanyCode
+      SELECT 1
+      FROM Users U
+      WHERE LTRIM(RTRIM(U.UserCode)) =
+            LTRIM(RTRIM(CM.TM))
+        AND U.CompanyCode = CM.CompanyCode
   )
-ORDER BY
-    CM.TM,
-    U.CompanyCode;
-
-
------------------------------------------------------------------------------------------
-
-
+ORDER BY CM.TM;

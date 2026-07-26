@@ -1,233 +1,121 @@
-USE SalesOrderUAT;
-GO
+CurrentDatabase
+agriuat-db
 
-DECLARE @TM NVARCHAR(50) = N'25033410';
-DECLARE @CompanyCode BIGINT = 1054;
-DECLARE @Plant NVARCHAR(50) = NULL;
-DECLARE @StorageLocation NVARCHAR(50) = NULL;
 
-------------------------------------------------------------
--- 1. Confirm database
-------------------------------------------------------------
-SELECT DB_NAME() AS CurrentDatabase;
+UserId	UserCode	CompanyCode	RoleId	IsActive	RepManCode	Name	Email
+3976	25033410	1054	7	0	23073776	Vishesh Bhatt	25033410@mahindra.com
 
-------------------------------------------------------------
--- 2. Check the user in all companies
-------------------------------------------------------------
-SELECT
-    UserId,
-    UserCode,
-    CompanyCode,
-    RoleId,
-    IsActive,
-    RepManCode,
-    Name,
-    Email
-FROM Users
-WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM));
+UserId	UserCode	CompanyCode	RoleId	IsActive	RepManCode	Name
 
-------------------------------------------------------------
--- 3. Check exact user condition used by the procedure
-------------------------------------------------------------
-SELECT
-    UserId,
-    UserCode,
-    CompanyCode,
-    RoleId,
-    IsActive,
-    RepManCode,
-    Name
-FROM Users
-WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM))
-  AND CompanyCode = @CompanyCode
-  AND IsActive = 1;
+RequestedUser	RequestedCompany	DetectedRoleId
+25033410	1054	0
 
-------------------------------------------------------------
--- 4. Reproduce role lookup
-------------------------------------------------------------
-DECLARE @UserRoleId INT = 0;
+AccessibleTMCount
+0
 
-SELECT TOP 1
-    @UserRoleId = ISNULL(RoleId, 0)
-FROM Users
-WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM))
-  AND CompanyCode = @CompanyCode
-  AND IsActive = 1;
+TMCode
 
-SELECT
-    @TM AS RequestedUser,
-    @CompanyCode AS RequestedCompany,
-    @UserRoleId AS DetectedRoleId;
+CompanyCode	TM	Plant	CustomerCount
 
-------------------------------------------------------------
--- 5. Reproduce accessible TM calculation
-------------------------------------------------------------
-DECLARE @AccessibleTMs TABLE
-(
-    TMCode NVARCHAR(50)
-);
+StockPlant	StorageLocation	StockRowCount	TotalQuantity
+G100	CPFG	3717	143118.000
+G100	CPSP	1	5.000
+G100	CVFG	6423	158792.000
+G100	FMS2	8755	5533.397
+G100	PDFG	486	24720.000
+G100	PKFG	1770	97940.000
+G100	SRS1	1	1.000
+G100	SRS2	25	2058.948
+G101	SDSL	1	1538.000
+G102	S901	1147	618.780
+G104	S906	728	690.000
+G105	NDIS	686	24071.730
+G105	S901	1870	0.000
+G108	S902	749	6.000
+G114	S903	1617	1134.800
+G115	S901	1511	150.000
+G118	S901	3012	283.250
+G120	S901	1382	12974.750
+G123	S901	803	92.290
+G124	S905	599	5250.000
+G129	JJFG	579	63900.000
+MZ01	FZ05	149	0.000
+MZ01	S156	4076	0.000
+MZ01	S264	4333	0.000
+MZ01	S905	173	0.000
+MZ01	Z108	1250	0.000
+MZ01	Z111	167	0.000
+MZ01	Z115	2370	0.000
+MZ01	Z156	9167	0.000
+MZ01	Z157	2692	0.000
+MZ01	Z199	2107	0.000
+MZ01	Z232	1426	0.000
+MZ01	Z246	179	0.000
+MZ01	Z253	936	0.000
+MZ01	Z264	5252	0.000
+MZ01	Z266	967	0.000
+MZ01	Z268	43	0.000
+MZ01	Z269	760	0.000
+MZ01	Z270	682	0.000
+MZ01	Z271	657	0.000
+MZ01	Z272	428	0.000
+MZ01	Z273	597	0.000
+MZ01	Z275	452	0.000
+MZ01	Z276	724	0.000
+MZ01	Z277	36	0.000
+MZ01	Z905	453	0.000
+MZ02	S156	5	0.000
+MZ02	Z108	32	0.000
+MZ02	Z115	242	0.000
+MZ02	Z156	1040	0.000
+MZ02	Z157	249	0.000
+MZ02	Z211	516	194242.000
+MZ03	Z310	880	68100.000
+MZ04	S156	180	0.000
+MZ04	Z108	17	0.000
+MZ04	Z115	552	0.000
+MZ04	Z156	888	0.000
+MZ04	Z157	177	0.000
+MZ04	Z163	20	0.000
+MZ04	Z185	70	0.000
+MZ04	Z191	15	0.000
+MZ04	Z192	184	0.000
+MZ04	Z199	94	0.000
+MZ04	Z232	42	0.000
+MZ04	Z246	139	0.000
+MZ04	Z402	879	3609840.000
+MZ05	S260	1	0.000
+MZ05	S261	93	0.000
+MZ05	Z278	59	0.000
+MZ05	Z279	88	0.000
+MZ05	Z280	62	0.000
+MZ05	Z504	748	0.000
+MZ05	Z516	122	0.000
+MZ06	S261	323	0.000
+MZ06	Z261	440	0.000
+MZ06	Z277	106	0.000
+MZ07	S254	290	0.000
+MZ07	Z254	580	0.000
+MZ07	Z274	642	0.000
+MZ07	Z701	43	0.000
+MZ08	FZ05	391	0.000
+MZ08	S200	1284	0.000
+MZ08	S215	54	0.000
+MZ08	S260	43	0.000
+MZ08	S802	92	0.000
+MZ08	Z200	3267	0.000
+MZ08	Z260	1008	0.000
+MZ08	Z802	819	0.000
+MZ08	Z803	15	0.000
+MZ08	Z805	262	0.000
+MZ09	Z901	315	0.000
+strin	string	2	1737.000
 
-IF @UserRoleId = 4
-BEGIN
-    INSERT INTO @AccessibleTMs (TMCode)
-    SELECT DISTINCT LTRIM(RTRIM(CM.TM))
-    FROM TB_CustomerMaster CM
-    WHERE CM.CompanyCode = @CompanyCode
-      AND NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
-      AND
-      (
-          LTRIM(RTRIM(CM.TM)) = LTRIM(RTRIM(@TM))
-          OR EXISTS
-          (
-              SELECT 1
-              FROM Users U
-              WHERE U.CompanyCode = @CompanyCode
-                AND U.IsActive = 1
-                AND LTRIM(RTRIM(U.UserCode)) =
-                    LTRIM(RTRIM(CM.TM))
-                AND LTRIM(RTRIM(U.RepManCode)) =
-                    LTRIM(RTRIM(@TM))
-          )
-      );
-END
-ELSE IF @UserRoleId > 4
-BEGIN
-    INSERT INTO @AccessibleTMs (TMCode)
-    SELECT DISTINCT LTRIM(RTRIM(TM))
-    FROM TB_CustomerMaster
-    WHERE CompanyCode = @CompanyCode
-      AND NULLIF(LTRIM(RTRIM(TM)), '') IS NOT NULL;
-END;
+CurrentProcedureJoinCount
+0
 
-SELECT
-    COUNT(*) AS AccessibleTMCount
-FROM @AccessibleTMs;
+TrimmedJoinCount
+0
 
-SELECT
-    TMCode
-FROM @AccessibleTMs
-ORDER BY TMCode;
+Plant	Storage_Location	Material_Description	Unrestricted_Kgs
 
-------------------------------------------------------------
--- 6. Check customer master plants available to these TMs
-------------------------------------------------------------
-SELECT
-    CM.CompanyCode,
-    LTRIM(RTRIM(CM.TM)) AS TM,
-    LTRIM(RTRIM(CM.Plant)) AS Plant,
-    COUNT(*) AS CustomerCount
-FROM TB_CustomerMaster CM
-WHERE CM.CompanyCode = @CompanyCode
-  AND LTRIM(RTRIM(CM.TM)) IN
-  (
-      SELECT LTRIM(RTRIM(TMCode))
-      FROM @AccessibleTMs
-  )
-GROUP BY
-    CM.CompanyCode,
-    LTRIM(RTRIM(CM.TM)),
-    LTRIM(RTRIM(CM.Plant))
-ORDER BY Plant, TM;
-
-------------------------------------------------------------
--- 7. Check all stock plants
-------------------------------------------------------------
-SELECT
-    LTRIM(RTRIM(Plant)) AS StockPlant,
-    LTRIM(RTRIM(Storage_Location)) AS StorageLocation,
-    COUNT(*) AS StockRowCount,
-    SUM(ISNULL(Unrestricted_Kgs, 0)) AS TotalQuantity
-FROM TB_StockDetails
-GROUP BY
-    LTRIM(RTRIM(Plant)),
-    LTRIM(RTRIM(Storage_Location))
-ORDER BY StockPlant, StorageLocation;
-
-------------------------------------------------------------
--- 8. Check exact current join used by procedure
-------------------------------------------------------------
-SELECT
-    COUNT(*) AS CurrentProcedureJoinCount
-FROM TB_StockDetails SD
-INNER JOIN TB_CustomerMaster CM
-    ON SD.Plant = CM.Plant
-WHERE CM.CompanyCode = @CompanyCode
-  AND CM.TM IN
-  (
-      SELECT TMCode
-      FROM @AccessibleTMs
-  )
-  AND (@Plant IS NULL OR SD.Plant = @Plant)
-  AND
-  (
-      @StorageLocation IS NULL
-      OR SD.Storage_Location = @StorageLocation
-  );
-
-------------------------------------------------------------
--- 9. Check join after trimming spaces
-------------------------------------------------------------
-SELECT
-    COUNT(*) AS TrimmedJoinCount
-FROM TB_StockDetails SD
-WHERE EXISTS
-(
-    SELECT 1
-    FROM TB_CustomerMaster CM
-    WHERE CM.CompanyCode = @CompanyCode
-      AND LTRIM(RTRIM(CM.Plant)) =
-          LTRIM(RTRIM(SD.Plant))
-      AND LTRIM(RTRIM(CM.TM)) IN
-      (
-          SELECT LTRIM(RTRIM(TMCode))
-          FROM @AccessibleTMs
-      )
-)
-AND
-(
-    @Plant IS NULL
-    OR LTRIM(RTRIM(SD.Plant)) =
-       LTRIM(RTRIM(@Plant))
-)
-AND
-(
-    @StorageLocation IS NULL
-    OR LTRIM(RTRIM(SD.Storage_Location)) =
-       LTRIM(RTRIM(@StorageLocation))
-);
-
-------------------------------------------------------------
--- 10. Display matching stock records
-------------------------------------------------------------
-SELECT TOP 100
-    SD.Plant,
-    SD.Storage_Location,
-    SD.Material_Description,
-    SD.Unrestricted_Kgs
-FROM TB_StockDetails SD
-WHERE EXISTS
-(
-    SELECT 1
-    FROM TB_CustomerMaster CM
-    WHERE CM.CompanyCode = @CompanyCode
-      AND LTRIM(RTRIM(CM.Plant)) =
-          LTRIM(RTRIM(SD.Plant))
-      AND LTRIM(RTRIM(CM.TM)) IN
-      (
-          SELECT LTRIM(RTRIM(TMCode))
-          FROM @AccessibleTMs
-      )
-)
-AND
-(
-    @Plant IS NULL
-    OR LTRIM(RTRIM(SD.Plant)) =
-       LTRIM(RTRIM(@Plant))
-)
-AND
-(
-    @StorageLocation IS NULL
-    OR LTRIM(RTRIM(SD.Storage_Location)) =
-       LTRIM(RTRIM(@StorageLocation))
-)
-ORDER BY SD.Plant, SD.Material_Description;

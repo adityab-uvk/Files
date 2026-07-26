@@ -1,31 +1,233 @@
-CREATE OR ALTER PROCEDURE [dbo].[USP_ExportApproverHierarchy_1054]
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    SELECT
-        C.CustomerCode AS CustomerCode,
-        C.CustomerName AS CustomerName,
-
-        -- TM name
-        ISNULL(U1.Name, '') AS FirstApprover,
-
-        -- Reporting manager name
-        ISNULL(U2.Name, '') AS SecondApprover
-
-    FROM dbo.TB_CustomerMaster C
-
-    LEFT JOIN dbo.Users U1
-        ON U1.CompanyCode = C.CompanyCode
-        AND U1.UserCode = C.TM
-
-    LEFT JOIN dbo.Users U2
-        ON U2.CompanyCode = U1.CompanyCode
-        AND U2.UserCode = U1.RepManCode
-
-    WHERE C.CompanyCode = 1054
-
-    ORDER BY
-        C.CustomerCode;
-END;
+USE SalesOrderUAT;
 GO
+
+DECLARE @TM NVARCHAR(50) = N'25033410';
+DECLARE @CompanyCode BIGINT = 1054;
+DECLARE @Plant NVARCHAR(50) = NULL;
+DECLARE @StorageLocation NVARCHAR(50) = NULL;
+
+------------------------------------------------------------
+-- 1. Confirm database
+------------------------------------------------------------
+SELECT DB_NAME() AS CurrentDatabase;
+
+------------------------------------------------------------
+-- 2. Check the user in all companies
+------------------------------------------------------------
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    RoleId,
+    IsActive,
+    RepManCode,
+    Name,
+    Email
+FROM Users
+WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM));
+
+------------------------------------------------------------
+-- 3. Check exact user condition used by the procedure
+------------------------------------------------------------
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    RoleId,
+    IsActive,
+    RepManCode,
+    Name
+FROM Users
+WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM))
+  AND CompanyCode = @CompanyCode
+  AND IsActive = 1;
+
+------------------------------------------------------------
+-- 4. Reproduce role lookup
+------------------------------------------------------------
+DECLARE @UserRoleId INT = 0;
+
+SELECT TOP 1
+    @UserRoleId = ISNULL(RoleId, 0)
+FROM Users
+WHERE LTRIM(RTRIM(UserCode)) = LTRIM(RTRIM(@TM))
+  AND CompanyCode = @CompanyCode
+  AND IsActive = 1;
+
+SELECT
+    @TM AS RequestedUser,
+    @CompanyCode AS RequestedCompany,
+    @UserRoleId AS DetectedRoleId;
+
+------------------------------------------------------------
+-- 5. Reproduce accessible TM calculation
+------------------------------------------------------------
+DECLARE @AccessibleTMs TABLE
+(
+    TMCode NVARCHAR(50)
+);
+
+IF @UserRoleId = 4
+BEGIN
+    INSERT INTO @AccessibleTMs (TMCode)
+    SELECT DISTINCT LTRIM(RTRIM(CM.TM))
+    FROM TB_CustomerMaster CM
+    WHERE CM.CompanyCode = @CompanyCode
+      AND NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
+      AND
+      (
+          LTRIM(RTRIM(CM.TM)) = LTRIM(RTRIM(@TM))
+          OR EXISTS
+          (
+              SELECT 1
+              FROM Users U
+              WHERE U.CompanyCode = @CompanyCode
+                AND U.IsActive = 1
+                AND LTRIM(RTRIM(U.UserCode)) =
+                    LTRIM(RTRIM(CM.TM))
+                AND LTRIM(RTRIM(U.RepManCode)) =
+                    LTRIM(RTRIM(@TM))
+          )
+      );
+END
+ELSE IF @UserRoleId > 4
+BEGIN
+    INSERT INTO @AccessibleTMs (TMCode)
+    SELECT DISTINCT LTRIM(RTRIM(TM))
+    FROM TB_CustomerMaster
+    WHERE CompanyCode = @CompanyCode
+      AND NULLIF(LTRIM(RTRIM(TM)), '') IS NOT NULL;
+END;
+
+SELECT
+    COUNT(*) AS AccessibleTMCount
+FROM @AccessibleTMs;
+
+SELECT
+    TMCode
+FROM @AccessibleTMs
+ORDER BY TMCode;
+
+------------------------------------------------------------
+-- 6. Check customer master plants available to these TMs
+------------------------------------------------------------
+SELECT
+    CM.CompanyCode,
+    LTRIM(RTRIM(CM.TM)) AS TM,
+    LTRIM(RTRIM(CM.Plant)) AS Plant,
+    COUNT(*) AS CustomerCount
+FROM TB_CustomerMaster CM
+WHERE CM.CompanyCode = @CompanyCode
+  AND LTRIM(RTRIM(CM.TM)) IN
+  (
+      SELECT LTRIM(RTRIM(TMCode))
+      FROM @AccessibleTMs
+  )
+GROUP BY
+    CM.CompanyCode,
+    LTRIM(RTRIM(CM.TM)),
+    LTRIM(RTRIM(CM.Plant))
+ORDER BY Plant, TM;
+
+------------------------------------------------------------
+-- 7. Check all stock plants
+------------------------------------------------------------
+SELECT
+    LTRIM(RTRIM(Plant)) AS StockPlant,
+    LTRIM(RTRIM(Storage_Location)) AS StorageLocation,
+    COUNT(*) AS StockRowCount,
+    SUM(ISNULL(Unrestricted_Kgs, 0)) AS TotalQuantity
+FROM TB_StockDetails
+GROUP BY
+    LTRIM(RTRIM(Plant)),
+    LTRIM(RTRIM(Storage_Location))
+ORDER BY StockPlant, StorageLocation;
+
+------------------------------------------------------------
+-- 8. Check exact current join used by procedure
+------------------------------------------------------------
+SELECT
+    COUNT(*) AS CurrentProcedureJoinCount
+FROM TB_StockDetails SD
+INNER JOIN TB_CustomerMaster CM
+    ON SD.Plant = CM.Plant
+WHERE CM.CompanyCode = @CompanyCode
+  AND CM.TM IN
+  (
+      SELECT TMCode
+      FROM @AccessibleTMs
+  )
+  AND (@Plant IS NULL OR SD.Plant = @Plant)
+  AND
+  (
+      @StorageLocation IS NULL
+      OR SD.Storage_Location = @StorageLocation
+  );
+
+------------------------------------------------------------
+-- 9. Check join after trimming spaces
+------------------------------------------------------------
+SELECT
+    COUNT(*) AS TrimmedJoinCount
+FROM TB_StockDetails SD
+WHERE EXISTS
+(
+    SELECT 1
+    FROM TB_CustomerMaster CM
+    WHERE CM.CompanyCode = @CompanyCode
+      AND LTRIM(RTRIM(CM.Plant)) =
+          LTRIM(RTRIM(SD.Plant))
+      AND LTRIM(RTRIM(CM.TM)) IN
+      (
+          SELECT LTRIM(RTRIM(TMCode))
+          FROM @AccessibleTMs
+      )
+)
+AND
+(
+    @Plant IS NULL
+    OR LTRIM(RTRIM(SD.Plant)) =
+       LTRIM(RTRIM(@Plant))
+)
+AND
+(
+    @StorageLocation IS NULL
+    OR LTRIM(RTRIM(SD.Storage_Location)) =
+       LTRIM(RTRIM(@StorageLocation))
+);
+
+------------------------------------------------------------
+-- 10. Display matching stock records
+------------------------------------------------------------
+SELECT TOP 100
+    SD.Plant,
+    SD.Storage_Location,
+    SD.Material_Description,
+    SD.Unrestricted_Kgs
+FROM TB_StockDetails SD
+WHERE EXISTS
+(
+    SELECT 1
+    FROM TB_CustomerMaster CM
+    WHERE CM.CompanyCode = @CompanyCode
+      AND LTRIM(RTRIM(CM.Plant)) =
+          LTRIM(RTRIM(SD.Plant))
+      AND LTRIM(RTRIM(CM.TM)) IN
+      (
+          SELECT LTRIM(RTRIM(TMCode))
+          FROM @AccessibleTMs
+      )
+)
+AND
+(
+    @Plant IS NULL
+    OR LTRIM(RTRIM(SD.Plant)) =
+       LTRIM(RTRIM(@Plant))
+)
+AND
+(
+    @StorageLocation IS NULL
+    OR LTRIM(RTRIM(SD.Storage_Location)) =
+       LTRIM(RTRIM(@StorageLocation))
+)
+ORDER BY SD.Plant, SD.Material_Description;

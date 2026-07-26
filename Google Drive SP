@@ -1,121 +1,64 @@
-CurrentDatabase
-agriuat-db
 
 
-UserId	UserCode	CompanyCode	RoleId	IsActive	RepManCode	Name	Email
-3976	25033410	1054	7	0	23073776	Vishesh Bhatt	25033410@mahindra.com
+SELECT DISTINCT
+    CM.TM AS TMCode,
+    CM.CompanyCode AS CustomerMasterCompanyCode,
+    U.CompanyCode AS UsersCompanyCode,
+    U.Name AS UserName,
+    U.RoleId,
+    U.IsActive,
+    U.RepManCode,
+    CASE
+        WHEN U.UserCode IS NULL THEN 'TM not found in Users'
+        WHEN U.CompanyCode <> CM.CompanyCode THEN 'CompanyCode mismatch'
+        ELSE 'Correct'
+    END AS Issue
+FROM TB_CustomerMaster CM
+LEFT JOIN Users U
+    ON LTRIM(RTRIM(U.UserCode)) = LTRIM(RTRIM(CM.TM))
+WHERE NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
+  AND
+  (
+      U.UserCode IS NULL
+      OR U.CompanyCode <> CM.CompanyCode
+  )
+ORDER BY
+    CM.TM,
+    CM.CompanyCode,
+    U.CompanyCode;
 
-UserId	UserCode	CompanyCode	RoleId	IsActive	RepManCode	Name
 
-RequestedUser	RequestedCompany	DetectedRoleId
-25033410	1054	0
+-------------------------------------------------------------------------------------
+DECLARE @CompanyCode BIGINT = 1054;
 
-AccessibleTMCount
-0
+SELECT DISTINCT
+    CM.TM AS TMCode,
+    CM.CompanyCode AS CustomerMasterCompanyCode,
+    U.CompanyCode AS UsersCompanyCode,
+    U.Name AS UserName,
+    U.RoleId,
+    U.IsActive,
+    U.RepManCode,
+    CASE
+        WHEN U.UserCode IS NULL THEN 'TM not found in Users'
+        WHEN U.CompanyCode <> CM.CompanyCode THEN 'CompanyCode mismatch'
+        ELSE 'Correct'
+    END AS Issue
+FROM TB_CustomerMaster CM
+LEFT JOIN Users U
+    ON LTRIM(RTRIM(U.UserCode)) = LTRIM(RTRIM(CM.TM))
+WHERE CM.CompanyCode = @CompanyCode
+  AND NULLIF(LTRIM(RTRIM(CM.TM)), '') IS NOT NULL
+  AND
+  (
+      U.UserCode IS NULL
+      OR U.CompanyCode <> CM.CompanyCode
+  )
+ORDER BY
+    CM.TM,
+    U.CompanyCode;
 
-TMCode
 
-CompanyCode	TM	Plant	CustomerCount
+-----------------------------------------------------------------------------------------
 
-StockPlant	StorageLocation	StockRowCount	TotalQuantity
-G100	CPFG	3717	143118.000
-G100	CPSP	1	5.000
-G100	CVFG	6423	158792.000
-G100	FMS2	8755	5533.397
-G100	PDFG	486	24720.000
-G100	PKFG	1770	97940.000
-G100	SRS1	1	1.000
-G100	SRS2	25	2058.948
-G101	SDSL	1	1538.000
-G102	S901	1147	618.780
-G104	S906	728	690.000
-G105	NDIS	686	24071.730
-G105	S901	1870	0.000
-G108	S902	749	6.000
-G114	S903	1617	1134.800
-G115	S901	1511	150.000
-G118	S901	3012	283.250
-G120	S901	1382	12974.750
-G123	S901	803	92.290
-G124	S905	599	5250.000
-G129	JJFG	579	63900.000
-MZ01	FZ05	149	0.000
-MZ01	S156	4076	0.000
-MZ01	S264	4333	0.000
-MZ01	S905	173	0.000
-MZ01	Z108	1250	0.000
-MZ01	Z111	167	0.000
-MZ01	Z115	2370	0.000
-MZ01	Z156	9167	0.000
-MZ01	Z157	2692	0.000
-MZ01	Z199	2107	0.000
-MZ01	Z232	1426	0.000
-MZ01	Z246	179	0.000
-MZ01	Z253	936	0.000
-MZ01	Z264	5252	0.000
-MZ01	Z266	967	0.000
-MZ01	Z268	43	0.000
-MZ01	Z269	760	0.000
-MZ01	Z270	682	0.000
-MZ01	Z271	657	0.000
-MZ01	Z272	428	0.000
-MZ01	Z273	597	0.000
-MZ01	Z275	452	0.000
-MZ01	Z276	724	0.000
-MZ01	Z277	36	0.000
-MZ01	Z905	453	0.000
-MZ02	S156	5	0.000
-MZ02	Z108	32	0.000
-MZ02	Z115	242	0.000
-MZ02	Z156	1040	0.000
-MZ02	Z157	249	0.000
-MZ02	Z211	516	194242.000
-MZ03	Z310	880	68100.000
-MZ04	S156	180	0.000
-MZ04	Z108	17	0.000
-MZ04	Z115	552	0.000
-MZ04	Z156	888	0.000
-MZ04	Z157	177	0.000
-MZ04	Z163	20	0.000
-MZ04	Z185	70	0.000
-MZ04	Z191	15	0.000
-MZ04	Z192	184	0.000
-MZ04	Z199	94	0.000
-MZ04	Z232	42	0.000
-MZ04	Z246	139	0.000
-MZ04	Z402	879	3609840.000
-MZ05	S260	1	0.000
-MZ05	S261	93	0.000
-MZ05	Z278	59	0.000
-MZ05	Z279	88	0.000
-MZ05	Z280	62	0.000
-MZ05	Z504	748	0.000
-MZ05	Z516	122	0.000
-MZ06	S261	323	0.000
-MZ06	Z261	440	0.000
-MZ06	Z277	106	0.000
-MZ07	S254	290	0.000
-MZ07	Z254	580	0.000
-MZ07	Z274	642	0.000
-MZ07	Z701	43	0.000
-MZ08	FZ05	391	0.000
-MZ08	S200	1284	0.000
-MZ08	S215	54	0.000
-MZ08	S260	43	0.000
-MZ08	S802	92	0.000
-MZ08	Z200	3267	0.000
-MZ08	Z260	1008	0.000
-MZ08	Z802	819	0.000
-MZ08	Z803	15	0.000
-MZ08	Z805	262	0.000
-MZ09	Z901	315	0.000
-strin	string	2	1737.000
-
-CurrentProcedureJoinCount
-0
-
-TrimmedJoinCount
-0
-
-Plant	Storage_Location	Material_Description	Unrestricted_Kgs
 

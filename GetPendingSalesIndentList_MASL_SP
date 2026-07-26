@@ -161,10 +161,14 @@ BEGIN
 
         SELECT
             p.CreateOrderNumber,
-            i.CartId,
-            i.Material_Code,
+            i.SrNo,
             i.Material_Description,
-            i.Quantity
+            i.Material_Code,
+            i.Quantity,
+            i.Rate,
+            i.Qty_Into_Rate_Amt,
+            i.CartId,
+            i.CartItemId
             FROM @PendingOrders p
             INNER JOIN TB_Cart_Items i
             ON p.CartId = i.CartId

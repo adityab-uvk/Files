@@ -1,106 +1,15 @@
-USE [SalesOrderUAT];
-GO
-
-BEGIN TRANSACTION;
-
--- Dispatch Request 1
-IF NOT EXISTS
+SELECT
+    BillingDocument,
+    BillingDate,
+    Sold_To_Party,
+    SalesOrganisation,
+    SalesOrderNo,
+    TotalInvoiceValue,
+    CreatedOn
+FROM TB_InvoiceHeader
+WHERE SalesOrderNo IN
 (
-    SELECT 1
-    FROM TB_InvoiceHeader
-    WHERE SalesOrderNo = '0304356801'
-      AND SalesOrganisation = 'MZ01'
+    '0304356801',
+    '0304623123'
 )
-BEGIN
-    INSERT INTO TB_InvoiceHeader
-    (
-        BillingDocument,
-        BillingDate,
-        BillingType,
-        BillingCategory,
-        ODN_No,
-        Sold_To_Party,
-        Sold_To_Party_Name,
-        Ship_To_Party,
-        Ship_To_Party_Name,
-        SalesOrganisation,
-        Dist_Channel,
-        Division,
-        SalesOrderNo,
-        TotalInvoiceValue,
-        Acknowledgement,
-        CreatedOn
-    )
-    VALUES
-    (
-        '9900000001',                 -- Test invoice number
-        '2026-01-24',
-        'TEST',
-        'TEST',
-        NULL,
-        'MPOT000189',
-        'Test Customer MPOT000189',
-        'MPOT000189',
-        'Test Customer MPOT000189',
-        'MZ01',
-        NULL,
-        NULL,
-        '0304356801',                 -- Keep leading zero
-        160000.00,
-        NULL,
-        GETDATE()
-    );
-END;
-
-
--- Dispatch Request 2
-IF NOT EXISTS
-(
-    SELECT 1
-    FROM TB_InvoiceHeader
-    WHERE SalesOrderNo = '0304623123'
-      AND SalesOrganisation = 'MZ01'
-)
-BEGIN
-    INSERT INTO TB_InvoiceHeader
-    (
-        BillingDocument,
-        BillingDate,
-        BillingType,
-        BillingCategory,
-        ODN_No,
-        Sold_To_Party,
-        Sold_To_Party_Name,
-        Ship_To_Party,
-        Ship_To_Party_Name,
-        SalesOrganisation,
-        Dist_Channel,
-        Division,
-        SalesOrderNo,
-        TotalInvoiceValue,
-        Acknowledgement,
-        CreatedOn
-    )
-    VALUES
-    (
-        '9900000002',                 -- Test invoice number
-        '2026-07-26',
-        'TEST',
-        'TEST',
-        NULL,
-        'MPOT003057',
-        'Test Customer MPOT003057',
-        'MPOT003057',
-        'Test Customer MPOT003057',
-        'MZ01',
-        NULL,
-        NULL,
-        '0304623123',                 -- Keep leading zero
-        48000.00,
-        NULL,
-        GETDATE()
-    );
-END;
-
-COMMIT TRANSACTION;
-GO
+AND SalesOrganisation = 'MZ01';

@@ -1,2 +1,118 @@
-Id	CustomerCode	OrderNumber	ProductId	ItemId	PriceCardType	PricePerKg	BookingPrice	BookedQty	BookingAmtPaid	BalanceAmtToPay	BalanceQuantity	DispatchStatus	RequestForQuantityMT	AmountRequiredToDispatch	BookingAmountReceived	BalanceAmount	FromDate	ToDate	DispatchAddress	CreatedOn
-4	MPOT003057	24	1	0	Single	24.00	18.00	5	0.00	30000.00	0	Complete	5.00	120000.00	90000.00	30000.00	2026-07-27	2026-07-30	Nashik	2026-07-27 10:12:27.440
+USE [SalesOrderUAT];
+GO
+
+DECLARE @DispatchRequestId INT = 4;
+DECLARE @BillingDocument NVARCHAR(50) = '9900000003';
+
+DECLARE @CustomerCode NVARCHAR(50);
+DECLARE @OrderNumber INT;
+DECLARE @ProductId INT;
+DECLARE @SoNumber NVARCHAR(50);
+DECLARE @DispatchAmount DECIMAL(18, 2);
+DECLARE @BillingDate DATE;
+
+-- Get dispatch-request details and its Sales Order number
+SELECT TOP 1
+    @CustomerCode = DR.CustomerCode,
+    @OrderNumber = DR.OrderNumber,
+    @ProductId = DR.ProductId,
+    @SoNumber = LTRIM(RTRIM(DO.SoNumber)),
+    @DispatchAmount = DR.AmountRequiredToDispatch,
+    @BillingDate = DR.FromDate
+FROM DispatchRequests DR
+INNER JOIN DealerOrderMHZPC DO
+    ON DR.OrderNumber = DO.OrderNumber
+   AND DR.ProductId = DO.ProductId
+WHERE DR.Id = @DispatchRequestId;
+
+-- Validate the DealerOrder/SO mapping
+IF @SoNumber IS NULL
+BEGIN
+    THROW 50001,
+          'SoNumber was not found in DealerOrderMHZPC for DispatchRequest Id 4.',
+          1;
+END;
+
+SELECT
+    @DispatchRequestId AS DispatchRequestId,
+    @CustomerCode AS CustomerCode,
+    @OrderNumber AS OrderNumber,
+    @ProductId AS ProductId,
+    @SoNumber AS SoNumber,
+    @DispatchAmount AS InvoiceAmount,
+    @BillingDate AS BillingDate;
+
+BEGIN TRANSACTION;
+
+-- Avoid inserting another invoice for the same SO and Sales Organisation
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM TB_InvoiceHeader
+    WHERE LTRIM(RTRIM(SalesOrderNo)) = @SoNumber
+      AND LTRIM(RTRIM(SalesOrganisation)) = 'MZ01'
+)
+BEGIN
+    -- Ensure the test BillingDocument is not already used
+    IF EXISTS
+    (
+        SELECT 1
+        FROM TB_InvoiceHeader
+        WHERE BillingDocument = @BillingDocument
+    )
+    BEGIN
+        ROLLBACK TRANSACTION;
+
+        THROW 50002,
+              'Test BillingDocument 9900000003 already exists. Use another test invoice number.',
+              1;
+    END;
+
+    INSERT INTO TB_InvoiceHeader
+    (
+        BillingDocument,
+        BillingDate,
+        BillingType,
+        BillingCategory,
+        ODN_No,
+        Sold_To_Party,
+        Sold_To_Party_Name,
+        Ship_To_Party,
+        Ship_To_Party_Name,
+        SalesOrganisation,
+        Dist_Channel,
+        Division,
+        SalesOrderNo,
+        TotalInvoiceValue,
+        Acknowledgement,
+        CreatedOn
+    )
+    VALUES
+    (
+        @BillingDocument,
+        @BillingDate,
+        'TEST',
+        'TEST',
+        NULL,
+        @CustomerCode,
+        'Test Customer ' + @CustomerCode,
+        @CustomerCode,
+        'Test Customer ' + @CustomerCode,
+        'MZ01',
+        NULL,
+        NULL,
+        @SoNumber,
+        @DispatchAmount,
+        NULL,
+        GETDATE()
+    );
+
+    PRINT 'Test invoice inserted successfully.';
+END
+ELSE
+BEGIN
+    PRINT 'An MZ01 invoice already exists for this Sales Order. No insert was made.';
+END;
+
+COMMIT TRANSACTION;
+GO

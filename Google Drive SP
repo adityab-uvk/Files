@@ -1,18 +1,10 @@
-EXEC dbo.GetDepositHistory
-    @CustomerCode = NULL,
-    @FromDate = NULL,
-    @ToDate = NULL,
-    @Status = NULL,
-    @UserId = '25010844',
-    @RoleId = 2;
+1. Execute the stored procedure with exact API values
 
+Id	CustomerCode	PaymentDate	AmountPaid	TransactionReferenceNo	ReceiptPath	Status	CreatedAt	ApprovedAt
+6	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/560223aa-9eca-48ba-81e9-b9c5486274b8.pdf	Pending	2026-07-25 12:18:43.213	NULL
+5	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/899d47a6-4243-445c-8597-be5e4c572ce7.pdf	Approved	2026-07-25 12:18:37.610	2026-07-25 12:21:15.677
+4	MPOT003057	2026-07-14 00:00:00.000	500000.00	ABC123	DepositImages/MPOT003057/14e81eba-c6c1-442c-a821-fc4af7d0ffaf.pdf	Approved	2026-07-14 07:00:44.003	2026-07-14 07:10:11.187
+3	MPOT002520	2026-01-23 00:00:00.000	1000.00	xxxxxxxxxxxxxxxxxxxxx	DepositImages/MPOT002520/d9bd5334-3809-48a4-aeb6-ce9239e3ec56.pdf	Pending	2026-01-24 06:25:24.193	NULL
 
-------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-EXEC dbo.GetDepositHistory
-    @CustomerCode = NULL,
-    @FromDate = NULL,
-    @ToDate = NULL,
-    @Status = '',
-    @UserId = '25010844',
-    @RoleId = 2;

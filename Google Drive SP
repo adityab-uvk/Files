@@ -1,113 +1,165 @@
-/****** Object:  StoredProcedure [dbo].[GetPartialDispatches]    Script Date: 7/27/2026 3:01:44 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 ALTER PROCEDURE [dbo].[GetPartialDispatches]
-
     @UserCode NVARCHAR(50),
     @CustomerCode NVARCHAR(50) = NULL
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     DECLARE @RoleId INT;
 
-    -- Get the RoleId of the logged-in user
-    SELECT @RoleId = UM.RoleId
-    FROM Users UM
-    WHERE UM.UserCode = @UserCode;
+    SET @UserCode = NULLIF(LTRIM(RTRIM(@UserCode)), '');
+    SET @CustomerCode = NULLIF(LTRIM(RTRIM(@CustomerCode)), '');
 
-    -- CTE to find all TMs under the given higher authority
-    WITH UserHierarchy AS (
-        SELECT UserCode FROM Users WHERE UserCode = @UserCode
+    -- Get logged-in user's RoleId
+    SELECT TOP 1
+        @RoleId = UM.RoleId
+    FROM Users UM
+    WHERE LTRIM(RTRIM(UM.UserCode)) = @UserCode;
+
+    IF @RoleId IS NULL
+    BEGIN
+        RAISERROR('User not found or RoleId is missing.', 16, 1);
+        RETURN;
+    END;
+
+    -- Find all users below the logged-in user
+    ;WITH UserHierarchy AS
+    (
+        SELECT
+            U.UserCode
+        FROM Users U
+        WHERE LTRIM(RTRIM(U.UserCode)) = @UserCode
+
         UNION ALL
-        SELECT U.UserCode FROM Users U 
-        INNER JOIN UserHierarchy UH ON U.RepManCode = UH.UserCode
+
+        SELECT
+            Child.UserCode
+        FROM Users Child
+        INNER JOIN UserHierarchy Parent
+            ON LTRIM(RTRIM(Child.RepManCode))
+             = LTRIM(RTRIM(Parent.UserCode))
     )
 
-    SELECT 
+    SELECT
         DR.*,
         DO.SoNumber,
-		DO.ProductName,
-		DO.SecondaryProductName,
+        DO.ProductName,
+        DO.SecondaryProductName,
         IH.BillingDocument AS InvoiceNumber
+
     FROM DispatchRequests DR
-    INNER JOIN DealerOrderMHZPC DO ON DR.OrderNumber = DO.OrderNumber 
-                                     AND DR.ProductId = DO.ProductId
-    INNER JOIN TB_InvoiceHeader IH ON DO.SoNumber = IH.SalesOrderNo AND SalesOrganisation = 'MZ01'
-    WHERE 
-        DR.DispatchStatus = 'Partial'
-        AND (
-            -- Case 1: Customers (RoleId = 1) can only see their own dispatches
-            (@RoleId = 1 AND DR.CustomerCode = @UserCode)
 
-            -- Case 2: Territory Manager (TM) (RoleId = 2)
-            OR (@RoleId = 2 AND 
-                (
-                    (@CustomerCode IS NOT NULL AND DR.CustomerCode = @CustomerCode)
-                    OR (@CustomerCode IS NULL AND DR.CustomerCode IN 
-                        (SELECT CustomerCode FROM TB_CustomerMaster WHERE TM = @UserCode AND CompanyCode = '1054'))
-                )
-            )
+    INNER JOIN DealerOrderMHZPC DO
+        ON DR.OrderNumber = DO.OrderNumber
+       AND DR.ProductId = DO.ProductId
 
-            -- Case 3: Higher Authorities (RoleId > 2)
-            OR (@RoleId > 2 AND 
-                (
-                    -- Fetch specific customer if provided
-                    (@CustomerCode IS NOT NULL AND DR.CustomerCode = @CustomerCode)
+    INNER JOIN TB_InvoiceHeader IH
+        ON LTRIM(RTRIM(DO.SoNumber))
+         = LTRIM(RTRIM(IH.SalesOrderNo))
+       AND LTRIM(RTRIM(IH.SalesOrganisation)) = 'MZ01'
 
-                    -- Fetch all customers under this authority if no specific customer is provided
-                    OR (@CustomerCode IS NULL AND DR.CustomerCode IN 
-                        (SELECT CustomerCode FROM TB_CustomerMaster 
-                         WHERE TM IN (SELECT UserCode FROM UserHierarchy)
-                        )
-                    )
-                )
-            )
-        );
-END
+    WHERE DR.DispatchStatus = 'Partial'
 
+      AND
+      (
+          -------------------------------------------------------------
+          -- RoleId 1: Customer can see only own dispatches
+          -------------------------------------------------------------
+          (
+              @RoleId = 1
+              AND LTRIM(RTRIM(DR.CustomerCode)) = @UserCode
+          )
 
+          -------------------------------------------------------------
+          -- RoleId 2: TM can see assigned customers
+          -------------------------------------------------------------
+          OR
+          (
+              @RoleId = 2
 
-----------------------------------------------------------------------------------------------
+              AND
+              (
+                  (
+                      @CustomerCode IS NOT NULL
+                      AND LTRIM(RTRIM(DR.CustomerCode))
+                          = @CustomerCode
+                  )
 
-/****** Object:  Table [dbo].[DispatchRequests]    Script Date: 7/27/2026 3:03:58 PM ******/
-SET ANSI_NULLS ON
+                  OR
+
+                  (
+                      @CustomerCode IS NULL
+
+                      AND LTRIM(RTRIM(DR.CustomerCode)) IN
+                      (
+                          SELECT
+                              LTRIM(RTRIM(CM.CustomerCode))
+                          FROM TB_CustomerMaster CM
+                          WHERE LTRIM(RTRIM(CM.TM)) = @UserCode
+                            AND CM.CompanyCode = 1054
+                      )
+                  )
+              )
+          )
+
+          -------------------------------------------------------------
+          -- RoleIds 3 and 4: See hierarchy customers
+          -------------------------------------------------------------
+          OR
+          (
+              @RoleId BETWEEN 3 AND 4
+
+              AND
+              (
+                  (
+                      @CustomerCode IS NOT NULL
+                      AND LTRIM(RTRIM(DR.CustomerCode))
+                          = @CustomerCode
+                  )
+
+                  OR
+
+                  (
+                      @CustomerCode IS NULL
+
+                      AND LTRIM(RTRIM(DR.CustomerCode)) IN
+                      (
+                          SELECT
+                              LTRIM(RTRIM(CM.CustomerCode))
+                          FROM TB_CustomerMaster CM
+                          WHERE CM.CompanyCode = 1054
+                            AND LTRIM(RTRIM(CM.TM)) IN
+                            (
+                                SELECT
+                                    LTRIM(RTRIM(UserCode))
+                                FROM UserHierarchy
+                            )
+                      )
+                  )
+              )
+          )
+
+          -------------------------------------------------------------
+          -- RoleId greater than 4: Business Admin sees all dispatches
+          -------------------------------------------------------------
+          OR
+          (
+              @RoleId > 4
+
+              AND
+              (
+                  @CustomerCode IS NULL
+
+                  OR LTRIM(RTRIM(DR.CustomerCode))
+                     = @CustomerCode
+              )
+          )
+      )
+
+    ORDER BY
+        DR.CreatedOn DESC,
+        DR.Id DESC
+
+    OPTION (MAXRECURSION 100);
+END;
 GO
-
-SET QUOTED_IDENTIFIER ON
-GO
-
-CREATE TABLE [dbo].[DispatchRequests](
-	[Id] [int] IDENTITY(1,1) NOT NULL,
-	[CustomerCode] [nvarchar](50) NOT NULL,
-	[OrderNumber] [int] NULL,
-	[ProductId] [int] NULL,
-	[ItemId] [int] NULL,
-	[PriceCardType] [nvarchar](20) NOT NULL,
-	[PricePerKg] [decimal](18, 2) NOT NULL,
-	[BookingPrice] [decimal](18, 2) NOT NULL,
-	[BookedQty] [float] NULL,
-	[BookingAmtPaid] [decimal](18, 2) NOT NULL,
-	[BalanceAmtToPay] [decimal](18, 2) NOT NULL,
-	[BalanceQuantity] [float] NULL,
-	[DispatchStatus] [nvarchar](20) NOT NULL,
-	[RequestForQuantityMT] [decimal](18, 2) NOT NULL,
-	[AmountRequiredToDispatch] [decimal](18, 2) NOT NULL,
-	[BookingAmountReceived] [decimal](18, 2) NOT NULL,
-	[BalanceAmount] [decimal](18, 2) NOT NULL,
-	[FromDate] [date] NOT NULL,
-	[ToDate] [date] NOT NULL,
-	[DispatchAddress] [nvarchar](255) NOT NULL,
-	[CreatedOn] [datetime] NULL,
-PRIMARY KEY CLUSTERED 
-(
-	[Id] ASC
-)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
-) ON [PRIMARY]
-GO
-
-ALTER TABLE [dbo].[DispatchRequests] ADD  DEFAULT (getdate()) FOR [CreatedOn]
-GO
-
---------------------------------------------------------------------------------------------------------

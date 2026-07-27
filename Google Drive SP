@@ -1,35 +1,113 @@
-SELECT
-    BillingDocument,
-    BillingDate,
-    Sold_To_Party,
-    SalesOrganisation,
-    SalesOrderNo,
-    TotalInvoiceValue,
-    CreatedOn
-FROM TB_InvoiceHeader
-WHERE SalesOrderNo IN
+/****** Object:  StoredProcedure [dbo].[GetPartialDispatches]    Script Date: 7/27/2026 3:01:44 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[GetPartialDispatches]
+
+    @UserCode NVARCHAR(50),
+    @CustomerCode NVARCHAR(50) = NULL
+AS
+BEGIN
+    DECLARE @RoleId INT;
+
+    -- Get the RoleId of the logged-in user
+    SELECT @RoleId = UM.RoleId
+    FROM Users UM
+    WHERE UM.UserCode = @UserCode;
+
+    -- CTE to find all TMs under the given higher authority
+    WITH UserHierarchy AS (
+        SELECT UserCode FROM Users WHERE UserCode = @UserCode
+        UNION ALL
+        SELECT U.UserCode FROM Users U 
+        INNER JOIN UserHierarchy UH ON U.RepManCode = UH.UserCode
+    )
+
+    SELECT 
+        DR.*,
+        DO.SoNumber,
+		DO.ProductName,
+		DO.SecondaryProductName,
+        IH.BillingDocument AS InvoiceNumber
+    FROM DispatchRequests DR
+    INNER JOIN DealerOrderMHZPC DO ON DR.OrderNumber = DO.OrderNumber 
+                                     AND DR.ProductId = DO.ProductId
+    INNER JOIN TB_InvoiceHeader IH ON DO.SoNumber = IH.SalesOrderNo AND SalesOrganisation = 'MZ01'
+    WHERE 
+        DR.DispatchStatus = 'Partial'
+        AND (
+            -- Case 1: Customers (RoleId = 1) can only see their own dispatches
+            (@RoleId = 1 AND DR.CustomerCode = @UserCode)
+
+            -- Case 2: Territory Manager (TM) (RoleId = 2)
+            OR (@RoleId = 2 AND 
+                (
+                    (@CustomerCode IS NOT NULL AND DR.CustomerCode = @CustomerCode)
+                    OR (@CustomerCode IS NULL AND DR.CustomerCode IN 
+                        (SELECT CustomerCode FROM TB_CustomerMaster WHERE TM = @UserCode AND CompanyCode = '1054'))
+                )
+            )
+
+            -- Case 3: Higher Authorities (RoleId > 2)
+            OR (@RoleId > 2 AND 
+                (
+                    -- Fetch specific customer if provided
+                    (@CustomerCode IS NOT NULL AND DR.CustomerCode = @CustomerCode)
+
+                    -- Fetch all customers under this authority if no specific customer is provided
+                    OR (@CustomerCode IS NULL AND DR.CustomerCode IN 
+                        (SELECT CustomerCode FROM TB_CustomerMaster 
+                         WHERE TM IN (SELECT UserCode FROM UserHierarchy)
+                        )
+                    )
+                )
+            )
+        );
+END
+
+
+
+----------------------------------------------------------------------------------------------
+
+/****** Object:  Table [dbo].[DispatchRequests]    Script Date: 7/27/2026 3:03:58 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[DispatchRequests](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CustomerCode] [nvarchar](50) NOT NULL,
+	[OrderNumber] [int] NULL,
+	[ProductId] [int] NULL,
+	[ItemId] [int] NULL,
+	[PriceCardType] [nvarchar](20) NOT NULL,
+	[PricePerKg] [decimal](18, 2) NOT NULL,
+	[BookingPrice] [decimal](18, 2) NOT NULL,
+	[BookedQty] [float] NULL,
+	[BookingAmtPaid] [decimal](18, 2) NOT NULL,
+	[BalanceAmtToPay] [decimal](18, 2) NOT NULL,
+	[BalanceQuantity] [float] NULL,
+	[DispatchStatus] [nvarchar](20) NOT NULL,
+	[RequestForQuantityMT] [decimal](18, 2) NOT NULL,
+	[AmountRequiredToDispatch] [decimal](18, 2) NOT NULL,
+	[BookingAmountReceived] [decimal](18, 2) NOT NULL,
+	[BalanceAmount] [decimal](18, 2) NOT NULL,
+	[FromDate] [date] NOT NULL,
+	[ToDate] [date] NOT NULL,
+	[DispatchAddress] [nvarchar](255) NOT NULL,
+	[CreatedOn] [datetime] NULL,
+PRIMARY KEY CLUSTERED 
 (
-    '0304356801',
-    '0304623123'
-)
-AND SalesOrganisation = 'MZ01';
+	[Id] ASC
+)WITH (STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
 
+ALTER TABLE [dbo].[DispatchRequests] ADD  DEFAULT (getdate()) FOR [CreatedOn]
+GO
 
----------------------------------------------------------------------
-EXEC dbo.GetPartialDispatches
-    @UserCode = '25033410',
-    @CustomerCode = 'MPOT000189';
- ----------------------------------------------------------------------------
-
-EXEC dbo.GetPartialDispatches
-    @UserCode = '25033410',
-    @CustomerCode = 'MPOT003057';
-
--------------------------------------------------------------------------
-
-EXEC dbo.GetPartialDispatches
-    @UserCode = '25033410',
-    @CustomerCode = NULL;
-
-
-----------------------------------------------------------
+--------------------------------------------------------------------------------------------------------

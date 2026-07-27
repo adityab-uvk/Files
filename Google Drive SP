@@ -1,62 +1,98 @@
-SELECT
-    UserId,
-    UserCode,
-    CompanyCode,
-    Name,
-    RoleId,
-    RepManCode,
-    IsActive
-FROM Users
-WHERE LTRIM(RTRIM(UserCode)) = '25010844';
+Check the TM user:
 
-------------------------------------------------------------------------
+UserId	UserCode	CompanyCode	Name	RoleId	RepManCode	IsActive
+3874	25010844	1054	Vipin Kumar	2	23147299	0
 
-SELECT
-    CustomerId,
-    CompanyCode,
-    CustomerCode,
-    CustomerName,
-    '[' + ISNULL(TM, '') + ']' AS StoredTM,
-    LEN(TM) AS TMLength,
-    DATALENGTH(TM) AS TMBytes
-FROM TB_CustomerMaster
-WHERE LTRIM(RTRIM(ISNULL(TM, ''))) = '25010844'
-ORDER BY CustomerCode;
+---------------------------------------------------------------------------------------------------
+Check customers assigned to this TM:
 
-----------------------------------------------------------------------------
-SELECT
-    db.Id,
-    db.CustomerCode,
-    cm.CustomerName,
-    cm.CompanyCode,
-    cm.TM,
-    db.PaymentDate,
-    db.AmountPaid,
-    db.Status,
-    db.CreatedAt
-FROM TB_DepositBalance db
-INNER JOIN TB_CustomerMaster cm
-    ON LTRIM(RTRIM(cm.CustomerCode))
-     = LTRIM(RTRIM(db.CustomerCode))
-WHERE LTRIM(RTRIM(ISNULL(cm.TM, ''))) = '25010844'
-ORDER BY db.CreatedAt DESC;
+CustomerId	CompanyCode	CustomerCode	CustomerName	StoredTM	TMLength	TMBytes
+7749	1054	AGISBF0044	ISCON BALAJI FOODS PVT.LTD.	[25010844]	8	16
+7748	1054	AGTNBA0122	The North Bengal Agro Services	[25010844]	8	16
+7747	1054	AGWS0214	ANANDESHWAR TRACTORS	[25010844]	8	16
+7640	1054	MPOT000452	URBAN AGRIGALLA PVT.LTD.	[25010844]	8	16
+7641	1054	MPOT000453	IQBAL SINGH S/o DARSHAN SINGH-DARGH	[25010844]	8	16
+7474	1054	MPOT000675	Lakhwinder Singh S/o Gurdev Singh-D	[25010844]	8	16
+7710	1054	MPOT000714	KAPIL AGRO SERVICE-UP	[25010844]	8	16
+7711	1054	MPOT000715	SRI GANESH TRADER -ODISHA	[25010844]	8	16
+7712	1054	MPOT000716	SHANKAR COLD STORE & ICE FACTORY	[25010844]	8	16
+7476	1054	MPOT000735	Sukhwinder Singh Dhillon	[25010844]	8	16
+7602	1054	MPOT000764	Ajai Dutt Singh	[25010844]	8	16
+7477	1054	MPOT000778	HIMANGI SEEDS CORPORATION	[25010844]	8	16
+7713	1054	MPOT000786	JALPO FARMS	[25010844]	8	16
+7432	1054	MPOT000798	Karanveer Singh	[25010844]	8	16
+7433	1054	MPOT000804	IqargerJot singh Gill S/o Jagjit	[25010844]	8	16
+7501	1054	MPOT001178	PAM AGENCIES	[25010844]	8	16
+7436	1054	MPOT001196	DALPREET AGRO	[25010844]	8	16
+7502	1054	MPOT001201	MAHARAJA SHEETGRAH PRIVATE LIMITED	[25010844]	8	16
+7428	1054	MPOT001202	MAA KELA DEVI KRISHI SEWA KENDRA	[25010844]	8	16
+7717	1054	MPOT001217	Talwinder Singh S/o Rachhpal Singh	[25010844]	8	16
+7718	1054	MPOT001233	Innovative Change Collaborative Ser	[25010844]	8	16
+7719	1054	MPOT001236	RAJPAL TRADING CO.	[25010844]	8	16
+7503	1054	MPOT001288	SHREEKANTA DAS	[25010844]	8	16
+7505	1054	MPOT001290	AMITABH TIWARI	[25010844]	8	16
+7720	1054	MPOT001291	Shakti Vegetables & Fruits Storage	[25010844]	8	16
+7591	1054	MPOT001462	Ajay Kumar Singh	[25010844]	8	16
+7592	1054	MPOT001463	Chandra Prakash Singh	[25010844]	8	16
+7437	1054	MPOT001529	DHVANI AGRO CENTRE	[25010844]	8	16
+7426	1054	MPOT001555	SAINI BEEJ BHANDAR	[25010844]	8	16
+7427	1054	MPOT001556	MANOJ KUMAR KATIYAR	[25010844]	8	16
+7509	1054	MPOT001625	S.P. Green Agri Fresh	[25010844]	8	16
+7693	1054	MPOT001648	BISWAJIT DEY	[25010844]	8	16
+7694	1054	MPOT001649	KAILASHNATH TRADING CO.	[25010844]	8	16
+7695	1054	MPOT001650	NEPAL GHOSH	[25010844]	8	16
+7277	1054	MPOT001655	Parmatma Singh Khosa S/o Sivrah Sin	[25010844]	8	16
+7682	1054	MPOT001713	Rahul Agri Biotech & Potato Farming	[25010844]	8	16
+7558	1054	MPOT001750	SHREE MAHAKALI TRADING COMPANY	[25010844]	8	16
+7802	1054	MPOT001771	ARUSHI KRISHAK SEWA KENDRA	[25010844]	8	16
+7800	1054	MPOT001827	RAGHVENDRA SINGH	[25010844]	8	16
+7785	1054	MPOT001940	SHUKLA SALES	[25010844]	8	16
+7617	1054	MPOT001941	NANDI TRADERS	[25010844]	8	16
+7778	1054	MPOT002397	MS JK Food Industries	[25010844]	8	16
+7392	1054	MPOT002448	Harinder Singh Khaira	[25010844]	8	16
+7572	1054	MPOT002468	SHANVI TRADERS	[25010844]	8	16
+7571	1054	MPOT002469	H. S. Agri Traders	[25010844]	8	16
+7568	1054	MPOT002473	SHREE BANKEY BIHARI JI TRADING CO.	[25010844]	8	16
+7561	1054	MPOT002481	YATHARTHA BIOTECH (OPC) PVT LTD.	[25010844]	8	16
+7560	1054	MPOT002482	Roy & Sahani Company	[25010844]	8	16
+7559	1054	MPOT002492	Gayatri Devi Agro Tech	[25010844]	8	16
+7554	1054	MPOT002520	Huda Agriculture	[25010844]	8	16
+7297	1054	MPOT002734	JAHANGIR ALAM	[25010844]	8	16
+7298	1054	MPOT002735	TIMIR BARAN CHOWDHURY	[25010844]	8	16
+7387	1054	MPOT002801	Rippaldeep Singh	[25010844]	8	16
+7383	1054	MPOT002885	Gurpreet Singh S/o Balwant Singh	[25010844]	8	16
+7296	1054	MPOT003038	TABDILLI FARMERS PRODUCER COMPANY	[25010844]	8	16
+7384	1054	MPOT003043	Jaspreet Singh S/o Jagvir Singh	[25010844]	8	16
+7385	1054	MPOT003044	Harwinder Singh Bhinder S/o Bhupind	[25010844]	8	16
+7386	1054	MPOT003045	Jaspinderpal Singh S/o Darshan Sing	[25010844]	8	16
+7391	1054	MPOT003047	Daljit Singh S/o Ram Singh	[25010844]	8	16
+7388	1054	MPOT003054	Resham Singh S/o Baldev Singh	[25010844]	8	16
+7389	1054	MPOT003055	Baljit Singh S/o Chamkaur Singh	[25010844]	8	16
+7390	1054	MPOT003056	Harwinder Singh S/o Tara Singh	[25010844]	8	16
+7278	1054	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	[25010844]	8	16
+7368	1054	MPOT003340	SHREE GANESH COLD STORAGE	[25010844]	8	16
+7743	1054	MPOT003494	AL ZAIN EXPORTS PRIVATE LIMITED	[25010844]	8	16
+7845	1054	MPOT003532	Khaira Veg Farm	[25010844]	8	16
+7844	1054	MPOT003579	Anowar Ali Seikh S/o Bondej Ali Sei	[25010844]	8	16
+7854	1054	MPOT003999	Rahul Kumar S/O Ramesh Chandra Shar	[25010844]	8	16
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Check whether those customers have deposits:
+
+Id	CustomerCode	CustomerName	CompanyCode	TM	PaymentDate	AmountPaid	Status	CreatedAt
+6	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-25 00:00:00.000	200000.00	Pending	2026-07-25 12:18:43.213
+5	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-25 00:00:00.000	200000.00	Approved	2026-07-25 12:18:37.610
+4	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-14 00:00:00.000	500000.00	Approved	2026-07-14 07:00:44.003
+3	MPOT002520	Huda Agriculture	1054	25010844	2026-01-23 00:00:00.000	1000.00	Pending	2026-01-24 06:25:24.193
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Check specifically for CompanyCode 1054
 
 
-------------------------------------------------------------------------------------
-SELECT
-    db.Id,
-    db.CustomerCode,
-    cm.CustomerName,
-    cm.CompanyCode,
-    cm.TM,
-    db.PaymentDate,
-    db.AmountPaid,
-    db.Status
-FROM TB_DepositBalance db
-INNER JOIN TB_CustomerMaster cm
-    ON LTRIM(RTRIM(cm.CustomerCode))
-     = LTRIM(RTRIM(db.CustomerCode))
-    AND cm.CompanyCode = 1054
-WHERE LTRIM(RTRIM(ISNULL(cm.TM, ''))) = '25010844'
-ORDER BY db.CreatedAt DESC;
-
+Id	CustomerCode	CustomerName	CompanyCode	TM	PaymentDate	AmountPaid	Status
+6	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-25 00:00:00.000	200000.00	Pending
+5	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-25 00:00:00.000	200000.00	Approved
+4	MPOT003057	Amarjeet Singh S/o Harbhajan Singh	1054	25010844	2026-07-14 00:00:00.000	500000.00	Approved
+3	MPOT002520	Huda Agriculture	1054	25010844	2026-01-23 00:00:00.000	1000.00	Pending

@@ -1,118 +1,175 @@
-USE [SalesOrderUAT];
-GO
-
-DECLARE @DispatchRequestId INT = 4;
-DECLARE @BillingDocument NVARCHAR(50) = '9900000003';
-
-DECLARE @CustomerCode NVARCHAR(50);
-DECLARE @OrderNumber INT;
-DECLARE @ProductId INT;
-DECLARE @SoNumber NVARCHAR(50);
-DECLARE @DispatchAmount DECIMAL(18, 2);
-DECLARE @BillingDate DATE;
-
--- Get dispatch-request details and its Sales Order number
-SELECT TOP 1
-    @CustomerCode = DR.CustomerCode,
-    @OrderNumber = DR.OrderNumber,
-    @ProductId = DR.ProductId,
-    @SoNumber = LTRIM(RTRIM(DO.SoNumber)),
-    @DispatchAmount = DR.AmountRequiredToDispatch,
-    @BillingDate = DR.FromDate
-FROM DispatchRequests DR
-INNER JOIN DealerOrderMHZPC DO
-    ON DR.OrderNumber = DO.OrderNumber
-   AND DR.ProductId = DO.ProductId
-WHERE DR.Id = @DispatchRequestId;
-
--- Validate the DealerOrder/SO mapping
-IF @SoNumber IS NULL
+ALTER PROCEDURE [dbo].[GetCompletedDispatches]
+    @UserCode NVARCHAR(50),
+    @CustomerCode NVARCHAR(50) = NULL
+AS
 BEGIN
-    THROW 50001,
-          'SoNumber was not found in DealerOrderMHZPC for DispatchRequest Id 4.',
-          1;
-END;
+    SET NOCOUNT ON;
 
-SELECT
-    @DispatchRequestId AS DispatchRequestId,
-    @CustomerCode AS CustomerCode,
-    @OrderNumber AS OrderNumber,
-    @ProductId AS ProductId,
-    @SoNumber AS SoNumber,
-    @DispatchAmount AS InvoiceAmount,
-    @BillingDate AS BillingDate;
+    DECLARE @RoleId INT;
 
-BEGIN TRANSACTION;
+    SET @UserCode =
+        NULLIF(LTRIM(RTRIM(@UserCode)), '');
 
--- Avoid inserting another invoice for the same SO and Sales Organisation
-IF NOT EXISTS
-(
-    SELECT 1
-    FROM TB_InvoiceHeader
-    WHERE LTRIM(RTRIM(SalesOrderNo)) = @SoNumber
-      AND LTRIM(RTRIM(SalesOrganisation)) = 'MZ01'
-)
-BEGIN
-    -- Ensure the test BillingDocument is not already used
-    IF EXISTS
-    (
-        SELECT 1
-        FROM TB_InvoiceHeader
-        WHERE BillingDocument = @BillingDocument
-    )
+    SET @CustomerCode =
+        NULLIF(LTRIM(RTRIM(@CustomerCode)), '');
+
+    ------------------------------------------------------------
+    -- Get logged-in user's RoleId
+    ------------------------------------------------------------
+    SELECT TOP 1
+        @RoleId = U.RoleId
+    FROM Users U
+    WHERE LTRIM(RTRIM(U.UserCode)) = @UserCode
+      AND U.CompanyCode = 1054;
+
+    IF @RoleId IS NULL
     BEGIN
-        ROLLBACK TRANSACTION;
+        RAISERROR(
+            'User not found or RoleId is missing for CompanyCode 1054.',
+            16,
+            1
+        );
 
-        THROW 50002,
-              'Test BillingDocument 9900000003 already exists. Use another test invoice number.',
-              1;
+        RETURN;
     END;
 
-    INSERT INTO TB_InvoiceHeader
+    ------------------------------------------------------------
+    -- Find users under RoleId 3 and RoleId 4 authorities
+    ------------------------------------------------------------
+    ;WITH UserHierarchy AS
     (
-        BillingDocument,
-        BillingDate,
-        BillingType,
-        BillingCategory,
-        ODN_No,
-        Sold_To_Party,
-        Sold_To_Party_Name,
-        Ship_To_Party,
-        Ship_To_Party_Name,
-        SalesOrganisation,
-        Dist_Channel,
-        Division,
-        SalesOrderNo,
-        TotalInvoiceValue,
-        Acknowledgement,
-        CreatedOn
+        SELECT
+            U.UserCode
+        FROM Users U
+        WHERE LTRIM(RTRIM(U.UserCode)) = @UserCode
+          AND U.CompanyCode = 1054
+
+        UNION ALL
+
+        SELECT
+            Child.UserCode
+        FROM Users Child
+        INNER JOIN UserHierarchy Parent
+            ON LTRIM(RTRIM(Child.RepManCode))
+             = LTRIM(RTRIM(Parent.UserCode))
+        WHERE Child.CompanyCode = 1054
+          AND ISNULL(Child.IsActive, 1) = 1
     )
-    VALUES
-    (
-        @BillingDocument,
-        @BillingDate,
-        'TEST',
-        'TEST',
-        NULL,
-        @CustomerCode,
-        'Test Customer ' + @CustomerCode,
-        @CustomerCode,
-        'Test Customer ' + @CustomerCode,
-        'MZ01',
-        NULL,
-        NULL,
-        @SoNumber,
-        @DispatchAmount,
-        NULL,
-        GETDATE()
-    );
 
-    PRINT 'Test invoice inserted successfully.';
-END
-ELSE
-BEGIN
-    PRINT 'An MZ01 invoice already exists for this Sales Order. No insert was made.';
+    SELECT
+        DR.*,
+        DO.SoNumber,
+        DO.ProductName,
+        DO.SecondaryProductName,
+        IH.BillingDocument AS InvoiceNumber
+
+    FROM DispatchRequests DR
+
+    INNER JOIN DealerOrderMHZPC DO
+        ON DR.OrderNumber = DO.OrderNumber
+       AND DR.ProductId = DO.ProductId
+
+    INNER JOIN TB_InvoiceHeader IH
+        ON LTRIM(RTRIM(DO.SoNumber))
+         = LTRIM(RTRIM(IH.SalesOrderNo))
+       AND LTRIM(RTRIM(IH.SalesOrganisation)) = 'MZ01'
+
+    WHERE LTRIM(RTRIM(DR.DispatchStatus)) = 'Complete'
+
+      AND
+      (
+          --------------------------------------------------------
+          -- RoleId 1: Customer sees only own dispatches
+          --------------------------------------------------------
+          (
+              @RoleId = 1
+              AND LTRIM(RTRIM(DR.CustomerCode)) = @UserCode
+          )
+
+          --------------------------------------------------------
+          -- RoleId 2: TM sees assigned customers
+          --------------------------------------------------------
+          OR
+          (
+              @RoleId = 2
+
+              AND
+              (
+                  @CustomerCode IS NULL
+                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
+              )
+
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM TB_CustomerMaster CM
+                  WHERE LTRIM(RTRIM(CM.CustomerCode))
+                        = LTRIM(RTRIM(DR.CustomerCode))
+                    AND LTRIM(RTRIM(CM.TM)) = @UserCode
+                    AND CM.CompanyCode = 1054
+              )
+          )
+
+          --------------------------------------------------------
+          -- RoleId 3 and 4: Hierarchy customers
+          --------------------------------------------------------
+          OR
+          (
+              @RoleId BETWEEN 3 AND 4
+
+              AND
+              (
+                  @CustomerCode IS NULL
+                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
+              )
+
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM TB_CustomerMaster CM
+                  WHERE LTRIM(RTRIM(CM.CustomerCode))
+                        = LTRIM(RTRIM(DR.CustomerCode))
+                    AND CM.CompanyCode = 1054
+                    AND LTRIM(RTRIM(CM.TM)) IN
+                    (
+                        SELECT
+                            LTRIM(RTRIM(UH.UserCode))
+                        FROM UserHierarchy UH
+                    )
+              )
+          )
+
+          --------------------------------------------------------
+          -- RoleId greater than 4:
+          -- Business Admin sees all completed dispatches
+          --------------------------------------------------------
+          OR
+          (
+              @RoleId > 4
+
+              -- Apply selected customer only when provided
+              AND
+              (
+                  @CustomerCode IS NULL
+                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
+              )
+
+              -- Restrict records to CompanyCode 1054
+              AND EXISTS
+              (
+                  SELECT 1
+                  FROM TB_CustomerMaster CM
+                  WHERE LTRIM(RTRIM(CM.CustomerCode))
+                        = LTRIM(RTRIM(DR.CustomerCode))
+                    AND CM.CompanyCode = 1054
+              )
+          )
+      )
+
+    ORDER BY
+        DR.CreatedOn DESC,
+        DR.Id DESC
+
+    OPTION (MAXRECURSION 100);
 END;
-
-COMMIT TRANSACTION;
 GO

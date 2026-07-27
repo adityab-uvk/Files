@@ -1,81 +1,16 @@
-SELECT
-    UserId,
-    UserCode,
-    CompanyCode,
-    RoleId,
-    RepManCode,
-    Name,
-    IsActive
-FROM dbo.Users
-WHERE CompanyCode = 1054
-  AND LTRIM(RTRIM(UserCode)) = '23147299';
+Check the ZM Record:
 
---------------------------------------------------------------------------------------------
+UserId	UserCode	CompanyCode	RoleId	RepManCode	Name	IsActive
+3834	23147299	1054	4		Divakar Rai	0
 
-SELECT
-    UserId,
-    UserCode AS RMCode,
-    Name AS RMName,
-    RoleId,
-    RepManCode,
-    IsActive
-FROM dbo.Users
-WHERE CompanyCode = 1054
-  AND RoleId = 3
-  AND LTRIM(RTRIM(RepManCode)) = '23147299';
 
--------------------------------------------------------------------------------------------
+Check RMs under this ZM:
 
-DECLARE @CompanyCode BIGINT = 1054;
-DECLARE @ZMCode NVARCHAR(50) = '23147299';
+UserId	RMCode	RMName	RoleId	RepManCode	IsActive
 
-SELECT
-    tm.UserCode AS TMCode,
-    tm.Name AS TMName,
-    tm.RepManCode AS RMCode,
-    rm.Name AS RMName
-FROM dbo.Users rm
-INNER JOIN dbo.Users tm
-    ON tm.CompanyCode = rm.CompanyCode
-   AND tm.RoleId = 2
-   AND LTRIM(RTRIM(tm.RepManCode)) =
-       LTRIM(RTRIM(rm.UserCode))
-WHERE rm.CompanyCode = @CompanyCode
-  AND rm.RoleId = 3
-  AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode;
 
----------------------------------------------------------------------------------------------------
+Check TMs under those RMs
+TMCode	TMName	RMCode	RMName
 
-DECLARE @CompanyCode BIGINT = 1054;
-DECLARE @ZMCode NVARCHAR(50) = '23147299';
-
-;WITH RMs AS
-(
-    SELECT LTRIM(RTRIM(UserCode)) AS RMCode
-    FROM dbo.Users
-    WHERE CompanyCode = @CompanyCode
-      AND RoleId = 3
-      AND LTRIM(RTRIM(RepManCode)) = @ZMCode
-),
-TMs AS
-(
-    SELECT DISTINCT
-        LTRIM(RTRIM(u.UserCode)) AS TMCode
-    FROM dbo.Users u
-    INNER JOIN RMs r
-        ON LTRIM(RTRIM(u.RepManCode)) = r.RMCode
-    WHERE u.CompanyCode = @CompanyCode
-      AND u.RoleId = 2
-)
-SELECT
-    cm.CustomerCode,
-    cm.CustomerName,
-    cm.TM,
-    cm.RegionDescription,
-    cm.CompanyCode
-FROM dbo.TB_CustomerMaster cm
-INNER JOIN TMs t
-    ON LTRIM(RTRIM(cm.TM)) = t.TMCode
-WHERE cm.CompanyCode = @CompanyCode
-ORDER BY cm.TM, cm.CustomerCode;
-
+Check Customers under the ZM Hierarchy
+CustomerCode	CustomerName	TM	RegionDescription	CompanyCode

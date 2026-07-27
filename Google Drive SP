@@ -1,16 +1,62 @@
-Check the ZM Record:
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    Name,
+    RoleId,
+    RepManCode,
+    IsActive
+FROM Users
+WHERE LTRIM(RTRIM(UserCode)) = '25010844';
 
-UserId	UserCode	CompanyCode	RoleId	RepManCode	Name	IsActive
-3834	23147299	1054	4		Divakar Rai	0
+------------------------------------------------------------------------
+
+SELECT
+    CustomerId,
+    CompanyCode,
+    CustomerCode,
+    CustomerName,
+    '[' + ISNULL(TM, '') + ']' AS StoredTM,
+    LEN(TM) AS TMLength,
+    DATALENGTH(TM) AS TMBytes
+FROM TB_CustomerMaster
+WHERE LTRIM(RTRIM(ISNULL(TM, ''))) = '25010844'
+ORDER BY CustomerCode;
+
+----------------------------------------------------------------------------
+SELECT
+    db.Id,
+    db.CustomerCode,
+    cm.CustomerName,
+    cm.CompanyCode,
+    cm.TM,
+    db.PaymentDate,
+    db.AmountPaid,
+    db.Status,
+    db.CreatedAt
+FROM TB_DepositBalance db
+INNER JOIN TB_CustomerMaster cm
+    ON LTRIM(RTRIM(cm.CustomerCode))
+     = LTRIM(RTRIM(db.CustomerCode))
+WHERE LTRIM(RTRIM(ISNULL(cm.TM, ''))) = '25010844'
+ORDER BY db.CreatedAt DESC;
 
 
-Check RMs under this ZM:
+------------------------------------------------------------------------------------
+SELECT
+    db.Id,
+    db.CustomerCode,
+    cm.CustomerName,
+    cm.CompanyCode,
+    cm.TM,
+    db.PaymentDate,
+    db.AmountPaid,
+    db.Status
+FROM TB_DepositBalance db
+INNER JOIN TB_CustomerMaster cm
+    ON LTRIM(RTRIM(cm.CustomerCode))
+     = LTRIM(RTRIM(db.CustomerCode))
+    AND cm.CompanyCode = 1054
+WHERE LTRIM(RTRIM(ISNULL(cm.TM, ''))) = '25010844'
+ORDER BY db.CreatedAt DESC;
 
-UserId	RMCode	RMName	RoleId	RepManCode	IsActive
-
-
-Check TMs under those RMs
-TMCode	TMName	RMCode	RMName
-
-Check Customers under the ZM Hierarchy
-CustomerCode	CustomerName	TM	RegionDescription	CompanyCode

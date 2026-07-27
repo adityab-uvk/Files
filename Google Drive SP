@@ -13,3 +13,23 @@ WHERE SalesOrderNo IN
     '0304623123'
 )
 AND SalesOrganisation = 'MZ01';
+
+
+---------------------------------------------------------------------
+EXEC dbo.GetPartialDispatches
+    @UserCode = '25033410',
+    @CustomerCode = 'MPOT000189';
+ ----------------------------------------------------------------------------
+
+EXEC dbo.GetPartialDispatches
+    @UserCode = '25033410',
+    @CustomerCode = 'MPOT003057';
+
+-------------------------------------------------------------------------
+
+EXEC dbo.GetPartialDispatches
+    @UserCode = '25033410',
+    @CustomerCode = NULL;
+
+
+----------------------------------------------------------

@@ -1,175 +1,81 @@
-ALTER PROCEDURE [dbo].[GetCompletedDispatches]
-    @UserCode NVARCHAR(50),
-    @CustomerCode NVARCHAR(50) = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
+SELECT
+    UserId,
+    UserCode,
+    CompanyCode,
+    RoleId,
+    RepManCode,
+    Name,
+    IsActive
+FROM dbo.Users
+WHERE CompanyCode = 1054
+  AND LTRIM(RTRIM(UserCode)) = '23147299';
 
-    DECLARE @RoleId INT;
+--------------------------------------------------------------------------------------------
 
-    SET @UserCode =
-        NULLIF(LTRIM(RTRIM(@UserCode)), '');
+SELECT
+    UserId,
+    UserCode AS RMCode,
+    Name AS RMName,
+    RoleId,
+    RepManCode,
+    IsActive
+FROM dbo.Users
+WHERE CompanyCode = 1054
+  AND RoleId = 3
+  AND LTRIM(RTRIM(RepManCode)) = '23147299';
 
-    SET @CustomerCode =
-        NULLIF(LTRIM(RTRIM(@CustomerCode)), '');
+-------------------------------------------------------------------------------------------
 
-    ------------------------------------------------------------
-    -- Get logged-in user's RoleId
-    ------------------------------------------------------------
-    SELECT TOP 1
-        @RoleId = U.RoleId
-    FROM Users U
-    WHERE LTRIM(RTRIM(U.UserCode)) = @UserCode
-      AND U.CompanyCode = 1054;
+DECLARE @CompanyCode BIGINT = 1054;
+DECLARE @ZMCode NVARCHAR(50) = '23147299';
 
-    IF @RoleId IS NULL
-    BEGIN
-        RAISERROR(
-            'User not found or RoleId is missing for CompanyCode 1054.',
-            16,
-            1
-        );
+SELECT
+    tm.UserCode AS TMCode,
+    tm.Name AS TMName,
+    tm.RepManCode AS RMCode,
+    rm.Name AS RMName
+FROM dbo.Users rm
+INNER JOIN dbo.Users tm
+    ON tm.CompanyCode = rm.CompanyCode
+   AND tm.RoleId = 2
+   AND LTRIM(RTRIM(tm.RepManCode)) =
+       LTRIM(RTRIM(rm.UserCode))
+WHERE rm.CompanyCode = @CompanyCode
+  AND rm.RoleId = 3
+  AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode;
 
-        RETURN;
-    END;
+---------------------------------------------------------------------------------------------------
 
-    ------------------------------------------------------------
-    -- Find users under RoleId 3 and RoleId 4 authorities
-    ------------------------------------------------------------
-    ;WITH UserHierarchy AS
-    (
-        SELECT
-            U.UserCode
-        FROM Users U
-        WHERE LTRIM(RTRIM(U.UserCode)) = @UserCode
-          AND U.CompanyCode = 1054
+DECLARE @CompanyCode BIGINT = 1054;
+DECLARE @ZMCode NVARCHAR(50) = '23147299';
 
-        UNION ALL
+;WITH RMs AS
+(
+    SELECT LTRIM(RTRIM(UserCode)) AS RMCode
+    FROM dbo.Users
+    WHERE CompanyCode = @CompanyCode
+      AND RoleId = 3
+      AND LTRIM(RTRIM(RepManCode)) = @ZMCode
+),
+TMs AS
+(
+    SELECT DISTINCT
+        LTRIM(RTRIM(u.UserCode)) AS TMCode
+    FROM dbo.Users u
+    INNER JOIN RMs r
+        ON LTRIM(RTRIM(u.RepManCode)) = r.RMCode
+    WHERE u.CompanyCode = @CompanyCode
+      AND u.RoleId = 2
+)
+SELECT
+    cm.CustomerCode,
+    cm.CustomerName,
+    cm.TM,
+    cm.RegionDescription,
+    cm.CompanyCode
+FROM dbo.TB_CustomerMaster cm
+INNER JOIN TMs t
+    ON LTRIM(RTRIM(cm.TM)) = t.TMCode
+WHERE cm.CompanyCode = @CompanyCode
+ORDER BY cm.TM, cm.CustomerCode;
 
-        SELECT
-            Child.UserCode
-        FROM Users Child
-        INNER JOIN UserHierarchy Parent
-            ON LTRIM(RTRIM(Child.RepManCode))
-             = LTRIM(RTRIM(Parent.UserCode))
-        WHERE Child.CompanyCode = 1054
-          AND ISNULL(Child.IsActive, 1) = 1
-    )
-
-    SELECT
-        DR.*,
-        DO.SoNumber,
-        DO.ProductName,
-        DO.SecondaryProductName,
-        IH.BillingDocument AS InvoiceNumber
-
-    FROM DispatchRequests DR
-
-    INNER JOIN DealerOrderMHZPC DO
-        ON DR.OrderNumber = DO.OrderNumber
-       AND DR.ProductId = DO.ProductId
-
-    INNER JOIN TB_InvoiceHeader IH
-        ON LTRIM(RTRIM(DO.SoNumber))
-         = LTRIM(RTRIM(IH.SalesOrderNo))
-       AND LTRIM(RTRIM(IH.SalesOrganisation)) = 'MZ01'
-
-    WHERE LTRIM(RTRIM(DR.DispatchStatus)) = 'Complete'
-
-      AND
-      (
-          --------------------------------------------------------
-          -- RoleId 1: Customer sees only own dispatches
-          --------------------------------------------------------
-          (
-              @RoleId = 1
-              AND LTRIM(RTRIM(DR.CustomerCode)) = @UserCode
-          )
-
-          --------------------------------------------------------
-          -- RoleId 2: TM sees assigned customers
-          --------------------------------------------------------
-          OR
-          (
-              @RoleId = 2
-
-              AND
-              (
-                  @CustomerCode IS NULL
-                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
-              )
-
-              AND EXISTS
-              (
-                  SELECT 1
-                  FROM TB_CustomerMaster CM
-                  WHERE LTRIM(RTRIM(CM.CustomerCode))
-                        = LTRIM(RTRIM(DR.CustomerCode))
-                    AND LTRIM(RTRIM(CM.TM)) = @UserCode
-                    AND CM.CompanyCode = 1054
-              )
-          )
-
-          --------------------------------------------------------
-          -- RoleId 3 and 4: Hierarchy customers
-          --------------------------------------------------------
-          OR
-          (
-              @RoleId BETWEEN 3 AND 4
-
-              AND
-              (
-                  @CustomerCode IS NULL
-                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
-              )
-
-              AND EXISTS
-              (
-                  SELECT 1
-                  FROM TB_CustomerMaster CM
-                  WHERE LTRIM(RTRIM(CM.CustomerCode))
-                        = LTRIM(RTRIM(DR.CustomerCode))
-                    AND CM.CompanyCode = 1054
-                    AND LTRIM(RTRIM(CM.TM)) IN
-                    (
-                        SELECT
-                            LTRIM(RTRIM(UH.UserCode))
-                        FROM UserHierarchy UH
-                    )
-              )
-          )
-
-          --------------------------------------------------------
-          -- RoleId greater than 4:
-          -- Business Admin sees all completed dispatches
-          --------------------------------------------------------
-          OR
-          (
-              @RoleId > 4
-
-              -- Apply selected customer only when provided
-              AND
-              (
-                  @CustomerCode IS NULL
-                  OR LTRIM(RTRIM(DR.CustomerCode)) = @CustomerCode
-              )
-
-              -- Restrict records to CompanyCode 1054
-              AND EXISTS
-              (
-                  SELECT 1
-                  FROM TB_CustomerMaster CM
-                  WHERE LTRIM(RTRIM(CM.CustomerCode))
-                        = LTRIM(RTRIM(DR.CustomerCode))
-                    AND CM.CompanyCode = 1054
-              )
-          )
-      )
-
-    ORDER BY
-        DR.CreatedOn DESC,
-        DR.Id DESC
-
-    OPTION (MAXRECURSION 100);
-END;
-GO

@@ -2,3 +2,42 @@ Id	CustomerCode	OrderNumber	ProductId	ItemId	PriceCardType	PricePerKg	BookingPri
 1	MPOT000189	8	1	0	Single	16.00	10.00	15	50000.00	90000.00	5	Partial	10.00	160000.00	100000.00	60000.00	2026-01-24	2026-01-31	ABB Signal	2026-01-24 13:33:40.403
 2	MPOT003057	23	1	0	Single	24.00	18.00	3	18000.00	18000.00	1	Partial	2.00	48000.00	36000.00	12000.00	2026-07-26	2026-07-29	Nashik	2026-07-25 12:49:05.423
 3	MPOT003057	23	1	0	Single	24.00	18.00	3	0.00	18000.00	0	Complete	1.00	24000.00	18000.00	6000.00	2026-07-28	2026-07-30	mumbai	2026-07-25 12:53:09.110
+
+------------------------------------------------------------------------------------------------------------------------------------
+
+ [BillingDocument]
+      ,[BillingDate]
+      ,[BillingType]
+      ,[BillingCategory]
+      ,[ODN_No]
+      ,[Sold_To_Party]
+      ,[Sold_To_Party_Name]
+      ,[Ship_To_Party]
+      ,[Ship_To_Party_Name]
+      ,[SalesOrganisation]
+      ,[Dist_Channel]
+      ,[Division]
+      ,[SalesOrderNo]
+      ,[TotalInvoiceValue]
+      ,[Acknowledgement]
+      ,[CreatedOn]
+  FROM [dbo].[TB_InvoiceHeader]
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+ [ItemNo]
+      ,[Material_Code]
+      ,[Material_Description]
+      ,[Batch]
+      ,[BilledQty]
+      ,[SalesUnit]
+      ,[NetPrice]
+      ,[DiscountValue]
+      ,[CGSTRate]
+      ,[CGSTAmount]
+      ,[SGSTRate]
+      ,[SGSTAmount]
+      ,[IGSTRate]
+      ,[IGSTAmount]
+      ,[BillingDocument]
+  FROM [dbo].[TB_InvoiceItemDetails]

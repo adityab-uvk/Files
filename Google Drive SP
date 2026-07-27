@@ -1,15 +1,3 @@
-SELECT
-    DR.Id AS DispatchRequestId,
-    DR.CustomerCode,
-    DR.OrderNumber,
-    DR.ProductId,
-    DR.DispatchStatus,
-    DO.SoNumber,
-    DO.ProductName,
-    DO.SecondaryProductName
-FROM DispatchRequests DR
-LEFT JOIN DealerOrderMHZPC DO
-    ON DR.OrderNumber = DO.OrderNumber
-   AND DR.ProductId = DO.ProductId
-WHERE DR.DispatchStatus = 'Partial'
-  AND DR.Id IN (1, 2);
+DispatchRequestId	CustomerCode	OrderNumber	ProductId	DispatchStatus	SoNumber	ProductName	SecondaryProductName
+1	MPOT000189	8	1	Partial	0304356801	POTATO COLOMBA MH11 G3 GRADE M2	NULL
+2	MPOT003057	23	1	Partial	0304623123	COLOMBA MH11 G1 GRADE M1	NULL

@@ -1,0 +1,120 @@
+ALTER PROCEDURE [dbo].[GetCompletedOrderReport]
+    @CompanyCode BIGINT,
+    @CustomerCodes NVARCHAR(MAX), -- Allows longer lists
+    @RoleId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @ErrorMessage NVARCHAR(MAX), @ErrorSeverity INT, @ErrorState INT;
+
+    DECLARE @CompletedOrders TABLE
+(
+    CompanyCode BIGINT,
+    CreateOrderNumber BIGINT,
+    CartId BIGINT
+);
+    BEGIN TRY
+        -- Validate inputs
+        IF @CompanyCode IS NULL OR @CustomerCodes IS NULL OR @RoleId IS NULL
+        BEGIN
+            RAISERROR ('Invalid input parameters: CompanyCode, CustomerCodes, or RoleId cannot be NULL', 16, 1);
+            RETURN;
+        END
+
+        -- Declare table variable for customer codes
+        DECLARE @UserCodeTable TABLE (CustomerCode NVARCHAR(50));
+
+        -- Insert customer codes into table
+        INSERT INTO @UserCodeTable (CustomerCode)
+        SELECT LTRIM(RTRIM(value)) FROM STRING_SPLIT(@CustomerCodes, ',');
+
+        -- Check if the table has any data
+        IF NOT EXISTS (SELECT 1 FROM @UserCodeTable)
+        BEGIN
+            RAISERROR ('No valid Customer Codes provided.', 16, 1);
+            RETURN;
+        END
+
+        INSERT INTO @CompletedOrders
+(
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+)
+SELECT
+    o.CompanyCode,
+    o.CreateOrderNumber,
+    o.CartId
+FROM TB_Create_Dealer_Order o
+WHERE o.CompanyCode = @CompanyCode
+AND o.UserCode IN (SELECT CustomerCode FROM @UserCodeTable)
+AND o.SONumber IS NOT NULL
+AND EXISTS
+(
+    SELECT 1
+    FROM TB_InvoiceHeader i
+    WHERE o.SONumber = i.SalesOrderNo
+);
+
+        -- Fetch completed order report based on RoleId
+        SELECT 
+            o.CompanyCode,
+            o.UserCode,
+            o.CustomerName,
+            o.CreateOrderNumber,
+            o.DateOfPurchase,
+            o.SONumber,
+            o.SO_Date,
+            o.Total_Items,
+            o.Total_Price,
+            o.TMApproval,
+            o.RMApproval,
+            o.CartId,
+			o.Email,
+			o.UserId,
+			o.SalesOrganisation
+			FROM TB_Create_Dealer_Order o	
+        WHERE o.CompanyCode = @CompanyCode 
+            AND o.UserCode IN (SELECT CustomerCode FROM @UserCodeTable) 
+            AND o.SONumber IS NOT NULL 
+			AND EXISTS(
+			SELECT 1
+			FROM TB_InvoiceHeader i
+			WHERE o.SONumber = i.SalesOrderNo
+			)
+	    ORDER BY o.CreateOrderNumber DESC;
+
+
+        SELECT
+    c.CreateOrderNumber,
+    i.SrNo,
+    i.Material_Description,
+    i.Material_Code,
+    i.Quantity,
+    i.Rate,
+    i.Qty_Into_Rate_Amt,
+    i.CartId,
+    i.CartItemId
+FROM @CompletedOrders c
+INNER JOIN TB_Cart_Items i
+    ON c.CompanyCode = i.CompanyCode
+   AND c.CartId = i.CartId
+ORDER BY c.CreateOrderNumber DESC,
+         i.SrNo;
+
+    END TRY
+    BEGIN CATCH
+        -- Capture error details
+        SET @ErrorMessage = ERROR_MESSAGE();
+        SET @ErrorSeverity = ERROR_SEVERITY();
+        SET @ErrorState = ERROR_STATE();
+
+        -- Log error into error log table
+        INSERT INTO ErrorLog (ErrorProcedure, ErrorMessage, ErrorSeverity, ErrorState, ErrorDate)
+        VALUES ('GetCompletedOrderReport', @ErrorMessage, @ErrorSeverity, @ErrorState, GETDATE());
+
+        -- Return error message to caller
+        SELECT -1 AS ResultCode, @ErrorMessage AS Message;
+    END CATCH;
+END;

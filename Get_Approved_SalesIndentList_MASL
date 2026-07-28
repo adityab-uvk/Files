@@ -193,6 +193,7 @@ AND (OrderRejectStatus=0 OR OrderRejectStatus IS NULL);
     i.SrNo,
     i.Material_Description,
     i.Material_Code,
+    ISNULL(Stock.Unrestricted_Kgs, 0) AS Stock,
     i.Quantity,
     i.Rate,
     i.Qty_Into_Rate_Amt,
@@ -202,6 +203,21 @@ FROM @ApprovedOrders a
 INNER JOIN TB_Cart_Items i
     ON a.CartId = i.CartId
    AND a.CompanyCode = i.CompanyCode
+
+   INNER JOIN TB_Create_Dealer_Order o
+    ON a.CreateOrderNumber = o.CreateOrderNumber
+   AND a.CompanyCode = o.CompanyCode
+
+OUTER APPLY
+(
+    SELECT TOP 1
+        Unrestricted_Kgs
+    FROM TB_StockDetails ts
+    WHERE ts.CompanyCode = o.CompanyCode
+      AND ts.Material = i.Material_Code
+      AND (o.Plant IS NULL OR ts.Storage_Location = o.Plant)
+    ORDER BY ts.Unrestricted_Kgs DESC
+) Stock
 ORDER BY a.CreateOrderNumber DESC, i.SrNo;
 
     END TRY

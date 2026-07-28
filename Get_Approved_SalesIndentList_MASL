@@ -232,7 +232,7 @@ ORDER BY a.CreateOrderNumber DESC, i.SrNo;
         INSERT INTO Error_Log (ErrorMessage, ErrorSeverity, ErrorState, ErrorLine, ErrorProcedure, ErrorDateTime)
         VALUES (@ErrorMessage, @ErrorSeverity, @ErrorState, @ErrorLine, @ErrorProcedure, GETDATE());
         
-        PRINT 'Error occurred in GetPendingSalesIndentList_MASL';
+       PRINT 'Error occurred in Get_Approved_SalesIndentList_MASL';
         PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS NVARCHAR(10));
         PRINT 'Error Message: ' + @ErrorMessage;
         PRINT 'Error Severity: ' + CAST(@ErrorSeverity AS NVARCHAR(10));

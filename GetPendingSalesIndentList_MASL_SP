@@ -164,6 +164,7 @@ BEGIN
             i.SrNo,
             i.Material_Description,
             i.Material_Code,
+            ISNULL(Stock.Unrestricted_Kgs, 0) AS Stock, 
             i.Quantity,
             i.Rate,
             i.Qty_Into_Rate_Amt,
@@ -173,6 +174,22 @@ BEGIN
             INNER JOIN TB_Cart_Items i
             ON p.CartId = i.CartId
             AND p.CompanyCode = i.CompanyCode
+
+            INNER JOIN TB_Create_Dealer_Order o
+            ON p.CreateOrderNumber = o.CreateOrderNumber
+            AND p.CompanyCode = o.CompanyCode
+
+            OUTER APPLY
+            (
+            SELECT TOP 1
+                Unrestricted_Kgs
+            FROM TB_StockDetails ts
+            WHERE ts.CompanyCode = o.CompanyCode
+              AND ts.Material = i.Material_Code
+              AND (o.Plant IS NULL OR ts.Storage_Location = o.Plant)
+            ORDER BY ts.Unrestricted_Kgs DESC
+            ) Stock
+
             ORDER BY p.CreateOrderNumber DESC, i.SrNo;
 
     END TRY

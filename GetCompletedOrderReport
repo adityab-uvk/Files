@@ -1,3 +1,11 @@
+USE [SalesOrderDB]
+GO
+/****** Object:  StoredProcedure [dbo].[GetCompletedOrderReport]    Script Date: 28-07-2026 12:19:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER PROCEDURE [dbo].[GetCompletedOrderReport]
     @CompanyCode BIGINT,
     @CustomerCodes NVARCHAR(MAX), -- Allows longer lists
@@ -91,17 +99,32 @@ AND EXISTS
     i.SrNo,
     i.Material_Description,
     i.Material_Code,
+    ISNULL(Stock.Unrestricted_Kgs, 0) AS Stock,
     i.Quantity,
     i.Rate,
     i.Qty_Into_Rate_Amt,
     i.CartId,
     i.CartItemId
-FROM @CompletedOrders c
-INNER JOIN TB_Cart_Items i
+    FROM @CompletedOrders c
+    INNER JOIN TB_Cart_Items i
     ON c.CompanyCode = i.CompanyCode
-   AND c.CartId = i.CartId
-ORDER BY c.CreateOrderNumber DESC,
-         i.SrNo;
+    AND c.CartId = i.CartId
+
+    INNER JOIN TB_Create_Dealer_Order o
+    ON c.CreateOrderNumber = o.CreateOrderNumber
+    AND c.CompanyCode = o.CompanyCode
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            Unrestricted_Kgs
+        FROM TB_StockDetails ts
+        WHERE ts.CompanyCode = o.CompanyCode
+          AND ts.Material = i.Material_Code
+          AND (o.Plant IS NULL OR ts.Storage_Location = o.Plant)
+        ORDER BY ts.Unrestricted_Kgs DESC
+    ) Stock
+        ORDER BY c.CreateOrderNumber DESC,i.SrNo;
 
     END TRY
     BEGIN CATCH

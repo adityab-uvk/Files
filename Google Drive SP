@@ -1,7 +1,131 @@
-Id	CustomerCode	PaymentDate	AmountPaid	TransactionReferenceNo	ReceiptPath	Status	ApprovedAt	CreatedAt
-1	MPOT000569	2025-12-19 11:25:06.033	260000.00	5620100	DepositImages/MPOT000569/4def50a1-c8fa-4f6d-b354-f6b3f4eb0d6e.pdf	Approved	2025-12-19 05:59:07.997	2025-12-19 05:57:06.637
-2	MPOT000569	2026-01-14 17:45:42.317	400000.00	DCV5689	DepositImages/MPOT000569/d32e00d4-3f31-408f-a4b6-546abe9c7502.pdf	Approved	2026-01-14 12:21:58.100	2026-01-14 12:16:36.833
-3	MPOT002520	2026-01-23 00:00:00.000	1000.00	xxxxxxxxxxxxxxxxxxxxx	DepositImages/MPOT002520/d9bd5334-3809-48a4-aeb6-ce9239e3ec56.pdf	Pending	NULL	2026-01-24 06:25:24.193
-4	MPOT003057	2026-07-14 00:00:00.000	500000.00	ABC123	DepositImages/MPOT003057/14e81eba-c6c1-442c-a821-fc4af7d0ffaf.pdf	Approved	2026-07-14 07:10:11.187	2026-07-14 07:00:44.003
-5	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/899d47a6-4243-445c-8597-be5e4c572ce7.pdf	Approved	2026-07-25 12:21:15.677	2026-07-25 12:18:37.610
-6	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/560223aa-9eca-48ba-81e9-b9c5486274b8.pdf	Pending	NULL	2026-07-25 12:18:43.213
+SELECT
+    CustomerCode,
+    CustomerName,
+    CompanyCode,
+    TM
+FROM TB_CustomerMaster
+WHERE CustomerCode = 'MPOT000569';
+
+--------------------------------------------------------------------------------------------------------------
+
+Test 1: Only RoleId and UserId:
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = NULL,
+    @ToDate = NULL,
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+----------------------------------------------------------------------------------------------------------------------------------------
+
+Test 2: Status = Approved
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = NULL,
+    @ToDate = NULL,
+    @Status = 'Approved',
+    @UserId = '25010844',
+    @RoleId = 2;
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Test 3: Status = Pending
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = NULL,
+    @ToDate = NULL,
+    @Status = 'Pending',
+    @UserId = '25010844',
+    @RoleId = 2;
+
+---------------------------------------------------------------------------------------------------------------------------------------
+
+Test 4: FromDate only
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-01',
+    @ToDate = NULL,
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+-----------------------------------------------------------------------------------------------------
+
+Test 5: ToDate only
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = NULL,
+    @ToDate = '2026-01-31',
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+
+------------------------------------------------------------------------------------------------------------
+
+Test 6: Exact date range for July
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-01',
+    @ToDate = '2026-07-31',
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+
+-------------------------------------------------------------------------------------------------------------------------------------
+
+Test 7: Single date, July 14
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-14',
+    @ToDate = '2026-07-14',
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+Test 8: Single date, July 25
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-25',
+    @ToDate = '2026-07-25',
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Test 9: Date range plus Approved status
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-25',
+    @ToDate = '2026-07-25',
+    @Status = NULL,
+    @UserId = '25010844',
+    @RoleId = 2;
+
+--------------------------------------------------------------------------------------------------------------
+
+Test 10: Date range plus Pending status
+
+EXEC dbo.GetDepositHistory
+    @CustomerCode = NULL,
+    @FromDate = '2026-07-01',
+    @ToDate = '2026-07-31',
+    @Status = 'Pending',
+    @UserId = '25010844',
+    @RoleId = 2;

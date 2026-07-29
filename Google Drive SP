@@ -1,50 +1,7 @@
-ALTER PROCEDURE [dbo].[UpdateContactNumber]
-    @CompanyCode BIGINT,
-    @UserCode NVARCHAR(50),
-    @RoleId INT,
-    @NewContactNumber NVARCHAR(50)
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @RowsAffected INT = 0;
-
-    IF @RoleId = 1
-    BEGIN
-        -- Customer contact number
-        UPDATE TB_CustomerMaster
-        SET
-            Telephone = @NewContactNumber,
-            Updated_at = GETDATE()
-        WHERE CompanyCode = @CompanyCode
-          AND CustomerCode = @UserCode;
-
-        SET @RowsAffected = @@ROWCOUNT;
-
-        -- Update login/user record when available
-        UPDATE Users
-        SET
-            ContactNumber = @NewContactNumber,
-            Updated_At = GETDATE()
-        WHERE CompanyCode = @CompanyCode
-          AND UserCode = @UserCode
-          AND RoleId = @RoleId;
-
-        SET @RowsAffected = @RowsAffected + @@ROWCOUNT;
-    END
-    ELSE
-    BEGIN
-        -- TM, RM, ZM and higher roles are stored in Users
-        UPDATE Users
-        SET
-            ContactNumber = @NewContactNumber,
-            Updated_At = GETDATE()
-        WHERE CompanyCode = @CompanyCode
-          AND UserCode = @UserCode
-          AND RoleId = @RoleId;
-
-        SET @RowsAffected = @@ROWCOUNT;
-    END
-
-    SELECT @RowsAffected AS RowsAffected;
-END;
+Id	CustomerCode	PaymentDate	AmountPaid	TransactionReferenceNo	ReceiptPath	Status	ApprovedAt	CreatedAt
+1	MPOT000569	2025-12-19 11:25:06.033	260000.00	5620100	DepositImages/MPOT000569/4def50a1-c8fa-4f6d-b354-f6b3f4eb0d6e.pdf	Approved	2025-12-19 05:59:07.997	2025-12-19 05:57:06.637
+2	MPOT000569	2026-01-14 17:45:42.317	400000.00	DCV5689	DepositImages/MPOT000569/d32e00d4-3f31-408f-a4b6-546abe9c7502.pdf	Approved	2026-01-14 12:21:58.100	2026-01-14 12:16:36.833
+3	MPOT002520	2026-01-23 00:00:00.000	1000.00	xxxxxxxxxxxxxxxxxxxxx	DepositImages/MPOT002520/d9bd5334-3809-48a4-aeb6-ce9239e3ec56.pdf	Pending	NULL	2026-01-24 06:25:24.193
+4	MPOT003057	2026-07-14 00:00:00.000	500000.00	ABC123	DepositImages/MPOT003057/14e81eba-c6c1-442c-a821-fc4af7d0ffaf.pdf	Approved	2026-07-14 07:10:11.187	2026-07-14 07:00:44.003
+5	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/899d47a6-4243-445c-8597-be5e4c572ce7.pdf	Approved	2026-07-25 12:21:15.677	2026-07-25 12:18:37.610
+6	MPOT003057	2026-07-25 00:00:00.000	200000.00	PQR456	DepositImages/MPOT003057/560223aa-9eca-48ba-81e9-b9c5486274b8.pdf	Pending	NULL	2026-07-25 12:18:43.213

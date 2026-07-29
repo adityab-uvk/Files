@@ -1,0 +1,91 @@
+ALTER PROCEDURE [dbo].[GetOrderDetails_MASL]
+    @CompanyCode BIGINT,
+    @Email NVARCHAR(120),
+    @UserId BIGINT,
+    @CreateOrderNumber BIGINT,
+    @CartId BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    BEGIN TRY
+        -- Fetch Order Details
+        SELECT 
+            o.CompanyCode,
+            o.CreateOrderNumber, 
+            o.DateOfPurchase, 
+            o.BillingAddress, 
+            o.ShippingAddress, 
+            o.Total_Price,
+            o.Total_Items,
+            o.TMApproval,
+            o.RMApproval,
+			o.NSM_Approval,
+			o.BHM_Approval,
+            o.OrderType,
+            o.CustomerName,
+            o.TMApproval_Date,
+            o.RMApproval_Date,
+            o.TMName,
+            o.RMName,
+            o.SONumber,
+            o.SO_Date,
+            o.Email,
+            o.UserCode,
+            o.UserId,
+            o.Approve_From_C_AND_F,
+            o.Approve_From_Plant,
+			 o.NSMCode,
+            o.NSMName,
+            o.BHM_Reporting_Code AS BHMCode,
+            o.BHMName,
+            o.Plant  
+        FROM TB_Create_Dealer_Order o
+        WHERE o.CreateOrderNumber = @CreateOrderNumber 
+            AND o.CompanyCode = @CompanyCode 
+            AND o.Email = @Email 
+            AND o.UserId = @UserId;
+
+        -- Fetch Item Details
+        SELECT 
+            i.Material_Description,
+			i.Material_Code, 
+            i.Quantity,
+            i.SrNo,
+            i.Rate,
+            i.Qty_Into_Rate_Amt,
+            i.CartId,
+            i.CartItemId 
+        FROM TB_Cart_Items i
+        WHERE i.CartId = @CartId 
+            AND i.CompanyCode = @CompanyCode 
+            AND i.Email = @Email 
+            AND i.UserId = @UserId;
+    END TRY
+
+    BEGIN CATCH
+        DECLARE 
+            @ErrorMessage NVARCHAR(4000) = ERROR_MESSAGE(),
+            @ErrorSeverity INT = ERROR_SEVERITY(),
+            @ErrorState INT = ERROR_STATE();
+
+        INSERT INTO Error_Log 
+        (
+            ProcedureName, 
+            ErrorMessage, 
+            ErrorSeverity, 
+            ErrorState, 
+            ErrorDate
+        )
+        VALUES 
+        (
+            'GetOrderDetails_MASL',
+            @ErrorMessage,
+            @ErrorSeverity,
+            @ErrorState,
+            GETDATE()
+        );
+
+        PRINT 'An error occurred. Please check the Error_Log table for details.';
+    END CATCH
+END

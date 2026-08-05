@@ -251,7 +251,11 @@ BEGIN
     ------------------------------------------------------------
     -- Remove orders where every item is fully dispatched
     ------------------------------------------------------------
-    AND O.OrderNumber NOT IN
+AND
+(
+    @BookingStatus = 'Approved'
+    OR
+    O.OrderNumber NOT IN
     (
         SELECT D2.OrderNumber
         FROM DealerOrderMHZPC D2
@@ -275,6 +279,7 @@ BEGIN
             END
         ) = 0
     )
+)
 
     OPTION (MAXRECURSION 100);
 END;

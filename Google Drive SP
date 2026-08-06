@@ -1,10 +1,1 @@
-OUTER APPLY
-(
-    SELECT TOP 1
-        ts.Unrestricted_Kgs
-    FROM TB_StockDetails ts
-    WHERE ts.CompanyCode = o.CompanyCode
-      AND LTRIM(RTRIM(ts.Material)) =
-          LTRIM(RTRIM(i.Material_Code))
-    ORDER BY ts.Unrestricted_Kgs DESC
-) Stock
+https://drive.google.com/file/d/1t_EN1e8vU3Emt0cMXmVoVoUE8Cgv5-5Y/view?usp=sharing

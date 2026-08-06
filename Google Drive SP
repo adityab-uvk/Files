@@ -1,184 +1,226 @@
-USE [SalesOrderUAT]
-GO
-
+/****** Object:  StoredProcedure [dbo].[GetPendingSalesIndentList_MASL]    Script Date: 8/7/2026 12:16:39 AM ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER PROCEDURE [dbo].[GetHierarchicalUsersByRoleId]
-(
+ALTER PROCEDURE [dbo].[GetPendingSalesIndentList_MASL]
+    @CompanyCode BIGINT,
     @UserCode NVARCHAR(50),
-    @RoleId INT,
-    @RequestedRoleId INT
-)
+    @RoleId INT
 AS
 BEGIN
     SET NOCOUNT ON;
+	
+    BEGIN TRY
 
-    DECLARE @CompanyCode BIGINT = 1054;
-
-    SELECT
-        U.[UserCode],
-        U.[CompanyCode],
-        U.[UserType],
-        U.[Name],
-        U.[Email],
-        U.[RepManCode],
-        U.[IsActive],
-        U.[RoleId],
-        U.[UserId],
-
-        CASE
-            WHEN U.RoleId = 1
-                THEN ISNULL(CustomerRegion.RegionDescription, '')
-            ELSE ''
-        END AS Region
-
-    FROM dbo.Users U
-
-    OUTER APPLY
-    (
-        SELECT TOP (1)
-            CM.RegionDescription
-        FROM dbo.TB_CustomerMaster CM
-        WHERE U.RoleId = 1
-          AND CM.CustomerCode = U.UserCode
-          AND CM.CompanyCode = U.CompanyCode
-        ORDER BY
-            CM.Updated_at DESC,
-            CM.CustomerId DESC
-    ) CustomerRegion
-
-    WHERE
-        U.CompanyCode = @CompanyCode
-        AND U.RoleId = @RequestedRoleId
-        AND
+    DECLARE @PendingOrders TABLE
         (
-            ---------------------------------------------------------
-            -- Business Admin, BHM and NSM
-            -- Can see all Customers, TMs and ZMs
-            ---------------------------------------------------------
-            (
-                @RoleId IN (7, 6, 5)
-            )
+            CompanyCode BIGINT,
+            CreateOrderNumber BIGINT,
+            CartId BIGINT
+        );
+      
+	  IF @RoleId = 1 -- for Dealer Login 
+        BEGIN
 
-            OR
+            -- Step 1: Insert matching orders into table variable
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode=@CompanyCode
+                AND UserCode=@UserCode
+                AND SONumber IS NULL
+                --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
 
-            ---------------------------------------------------------
-            -- Zonal Manager requesting Territory Managers
-            ---------------------------------------------------------
-            (
-                @RoleId = 4
-                AND @RequestedRoleId = 2
-                AND
-                (
-                    -- TM directly reporting to ZM
-                    U.RepManCode = @UserCode
 
-                    OR
+            SELECT 
+               *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode=@CompanyCode
+                AND UserCode=@UserCode
+				 AND SONumber IS NULL
+           		--AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))  
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)  
+            ORDER BY CreateOrderNumber DESC;
+        END 
+      
+	  ELSE IF @RoleId IN (2,3,4) -- for Dealer TM, RM, ZM
+		BEGIN
 
-                    -- TM reporting to an RM under the ZM
-                    U.RepManCode IN
-                    (
-                        SELECT RM.UserCode
-                        FROM dbo.Users RM
-                        WHERE RM.RoleId = 3
-                          AND RM.RepManCode = @UserCode
-                          AND RM.IsActive = 1
-                          AND RM.CompanyCode = @CompanyCode
-                    )
-                )
-            )
+        INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+              AND (RepManCode = @UserCode
+               OR SecondApprovalUserCode = @UserCode
+               OR ZSMCode = @UserCode)
+               AND SONumber IS NULL
+               --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))
+               AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
 
-            OR
+            SELECT 
+             *
+		    FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+ 
+            AND (RepManCode = @UserCode OR SecondApprovalUserCode=@UserCode OR ZSMCode=@UserCode )
+            AND SONumber IS NULL
+ 	        --AND (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0))  
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL) 
+                ORDER BY CreateOrderNumber DESC;
+        END
 
-            ---------------------------------------------------------
-            -- Zonal Manager requesting Customers
-            ---------------------------------------------------------
-            (
-                @RoleId = 4
-                AND @RequestedRoleId = 1
-                AND
-                (
-                    -- Customer directly reporting to ZM
-                    U.RepManCode = @UserCode
+		 ELSE IF @RoleId = 5   -- NSM
+        BEGIN
 
-                    OR
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+         -- AND NSMCode = @UserCode
+         -- AND Approve_From_C_AND_F = 1
+         -- AND NSM_Approval = 0
+         -- AND RMApproval = 1
+            AND SONumber IS NULL
+            AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
 
-                    -- Customer reporting to a TM under the ZM
-                    U.RepManCode IN
-                    (
-                        SELECT TM.UserCode
-                        FROM dbo.Users TM
-                        WHERE TM.RoleId = 2
-                          AND TM.CompanyCode = @CompanyCode
-                          AND
-                          (
-                              -- TM directly reporting to ZM
-                              TM.RepManCode = @UserCode
 
-                              OR
+            SELECT *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+             -- AND NSMCode = @UserCode
+             -- AND Approve_From_C_AND_F = 1
+             -- AND NSM_Approval = 0
+             -- AND RMApproval = 1
+			   AND SONumber IS NULL
+              AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)
+            ORDER BY CreateOrderNumber DESC;
+        END
 
-                              -- TM reporting to RM under ZM
-                              TM.RepManCode IN
-                              (
-                                  SELECT RM.UserCode
-                                  FROM dbo.Users RM
-                                  WHERE RM.RoleId = 3
-                                    AND RM.RepManCode = @UserCode
-                                    AND RM.CompanyCode = @CompanyCode
-                              )
-                          )
-                    )
-                )
-            )
+        /* ============================
+           4. BHM – Plant Flow Only
+        ============================ */
+        ELSE IF @RoleId = 6   -- BHM
+        BEGIN
 
-            OR
+        
+        INSERT INTO @PendingOrders
+        SELECT CompanyCode, CreateOrderNumber, CartId
+        FROM TB_Create_Dealer_Order
+        WHERE CompanyCode = @CompanyCode
+     -- AND BHM_Reporting_Code = @UserCode
+     -- AND Approve_From_Plant = 1
+     -- AND BHM_Approval = 0
+     -- AND RMApproval = 1
+       AND SONumber IS NULL
+       AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
 
-            ---------------------------------------------------------
-            -- Regional Manager requesting Territory Managers
-            ---------------------------------------------------------
-            (
-                @RoleId = 3
-                AND @RequestedRoleId = 2
-                AND U.RepManCode = @UserCode
-            )
 
-            OR
+            SELECT *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+            --  AND BHM_Reporting_Code = @UserCode
+             -- AND Approve_From_Plant = 1
+             -- AND BHM_Approval = 0
+             -- AND RMApproval = 1
+			   AND SONumber IS NULL
+              AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL)
+            ORDER BY CreateOrderNumber DESC;
+        END
 
-            ---------------------------------------------------------
-            -- Regional Manager requesting Customers
-            ---------------------------------------------------------
-            (
-                @RoleId = 3
-                AND @RequestedRoleId = 1
-                AND U.RepManCode IN
-                (
-                    SELECT TM.UserCode
-                    FROM dbo.Users TM
-                    WHERE TM.RoleId = 2
-                      AND TM.RepManCode = @UserCode
-                      AND TM.IsActive = 1
-                      AND TM.CompanyCode = @CompanyCode
-                )
-            )
 
-            OR
 
-            ---------------------------------------------------------
-            -- Territory Manager requesting Customers
-            ---------------------------------------------------------
-            (
-                @RoleId = 2
-                AND @RequestedRoleId = 1
-                AND U.RepManCode = @UserCode
-            )
-        )
 
-    ORDER BY U.Name;
 
-    SET NOCOUNT OFF;
+        ELSE IF @RoleId IN (7,8,9) -- for Top Management Roles Login
+        BEGIN
+
+            INSERT INTO @PendingOrders
+            SELECT CompanyCode, CreateOrderNumber, CartId
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+             -- AND BHM_Reporting_Code = @UserCode
+             -- AND Approve_From_Plant = 1
+             -- AND BHM_Approval = 0
+             -- AND RMApproval = 1
+           AND SONumber IS NULL
+           AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL);
+
+            SELECT 
+               *
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode
+                	--AND  (TMApproval = 0 OR (TMApproval = 1 AND RMApproval = 0)
+					--  OR (Approve_From_C_AND_F = 1 AND RMApproval = 1 AND NSM_Approval = 0)
+                    --OR (Approve_From_Plant = 1 AND RMApproval = 1 AND BHM_Approval = 0))
+                AND SONumber IS NULL
+					
+                AND (OrderRejectStatus = 0 OR OrderRejectStatus IS NULL) 
+                ORDER BY CreateOrderNumber DESC;
+        END 
+	       ELSE
+        BEGIN
+            PRINT 'Invalid User Role. No data found.';
+        END
+
+        SELECT
+            p.CreateOrderNumber,
+            i.SrNo,
+            i.Material_Description,
+            i.Material_Code,
+            ISNULL(Stock.Unrestricted_Kgs, 0) AS Stock, 
+            i.Quantity,
+            i.Rate,
+            i.Qty_Into_Rate_Amt,
+            i.CartId,
+            i.CartItemId
+            FROM @PendingOrders p
+            INNER JOIN TB_Cart_Items i
+            ON p.CartId = i.CartId
+            AND p.CompanyCode = i.CompanyCode
+
+            INNER JOIN TB_Create_Dealer_Order o
+            ON p.CreateOrderNumber = o.CreateOrderNumber
+            AND p.CompanyCode = o.CompanyCode
+
+          OUTER APPLY
+		(
+			SELECT TOP 1
+				ts.Unrestricted_Kgs
+			FROM TB_StockDetails ts
+			WHERE ts.CompanyCode = o.CompanyCode
+			  AND LTRIM(RTRIM(ts.Material)) = LTRIM(RTRIM(i.Material_Code))
+			  AND
+			  (
+				  NULLIF(LTRIM(RTRIM(o.Plant)), '') IS NULL
+				  OR LTRIM(RTRIM(ts.Storage_Location)) =
+					 LTRIM(RTRIM(o.Plant))
+			  )
+			ORDER BY ts.Unrestricted_Kgs DESC
+		) Stock
+
+            ORDER BY p.CreateOrderNumber DESC, i.SrNo;
+
+    END TRY
+
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        DECLARE @ErrorLine INT = ERROR_LINE();
+        DECLARE @ErrorProcedure NVARCHAR(200) = ERROR_PROCEDURE();
+        
+        -- Insert error details into the error log table
+        INSERT INTO Error_Log (ErrorMessage, ErrorSeverity, ErrorState, ErrorLine, ErrorProcedure, ErrorDateTime)
+        VALUES (@ErrorMessage, @ErrorSeverity, @ErrorState, @ErrorLine, @ErrorProcedure, GETDATE());
+        
+        PRINT 'Error occurred in GetPendingSalesIndentList_MASL';
+        PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS NVARCHAR(10));
+        PRINT 'Error Message: ' + @ErrorMessage;
+        PRINT 'Error Severity: ' + CAST(@ErrorSeverity AS NVARCHAR(10));
+        PRINT 'Error State: ' + CAST(@ErrorState AS NVARCHAR(10));
+        PRINT 'Error Line: ' + CAST(@ErrorLine AS NVARCHAR(10));
+        PRINT 'Error Procedure: ' + ISNULL(@ErrorProcedure, 'N/A');
+    END CATCH;
 END
-GO

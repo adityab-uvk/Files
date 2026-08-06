@@ -1,10 +1,209 @@
-OUTER APPLY
+/****** Object:  StoredProcedure [dbo].[GetSalesIndent_RejectList_MASL]    Script Date: 8/7/2026 12:43:21 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[GetSalesIndent_RejectList_MASL]
+    @CompanyCode BIGINT,
+    @UserCode NVARCHAR(50),
+    @RoleId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+	DECLARE @FisrtApproval bit;
+	
+    BEGIN TRY
+
+    DECLARE @RejectedOrders TABLE
+    (
+    CompanyCode BIGINT,
+    CreateOrderNumber BIGINT,
+    CartId BIGINT
+    );
+      
+	  IF @RoleId = 1 -- for Dealer Login 
+        BEGIN
+
+        INSERT INTO @RejectedOrders
 (
-    SELECT TOP 1
-        ts.Unrestricted_Kgs
-    FROM TB_StockDetails ts
-    WHERE ts.CompanyCode = o.CompanyCode
-      AND LTRIM(RTRIM(ts.Material)) =
-          LTRIM(RTRIM(i.Material_Code))
-    ORDER BY ts.Unrestricted_Kgs DESC
-) Stock
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+)
+SELECT
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+FROM TB_Create_Dealer_Order
+WHERE CompanyCode = @CompanyCode
+    AND UserCode = @UserCode
+    AND OrderRejectStatus = 1;
+
+            SELECT 
+                CompanyCode, 
+                CreateOrderNumber,
+                DateOfPurchase,
+                CartId,
+                UserId,
+                Total_Items,
+                Total_Price,
+                CustomerName,
+                RepManCode,
+                Email,
+                SecondApprovalUserCode,
+                SalesIndentStatus,
+                OrderRejectStatus,
+				UserCode,
+				[OrderRejectDate],
+				[OrderRejectName],
+				[OrderRejectRole],
+				[Rejectedreason]
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode 
+                AND UserCode = @UserCode 
+                AND OrderRejectStatus = 1
+            ORDER BY CreateOrderNumber DESC;
+        END 
+     
+	  ELSE IF @RoleId IN (2, 3, 4, 5) -- for Dealer TM, RM, ZM, or NSM 
+		BEGIN
+
+        INSERT INTO @RejectedOrders
+(
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+)
+SELECT
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+FROM TB_Create_Dealer_Order
+WHERE CompanyCode = @CompanyCode
+    AND OrderRejectStatus = 1;
+
+            SELECT 
+               CompanyCode, 
+                CreateOrderNumber,
+                DateOfPurchase,
+                CartId,
+                UserId,
+                Total_Items,
+                Total_Price,
+                CustomerName,
+                RepManCode,
+                Email,
+                SecondApprovalUserCode,
+                SalesIndentStatus,
+                OrderRejectStatus,
+				UserCode,
+				[OrderRejectDate],
+				[OrderRejectName],
+				[OrderRejectRole],
+				[Rejectedreason]
+		  FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode 
+                --AND (RepManCode =@UserCode OR SecondApprovalUserCode=@UserCode)
+               AND OrderRejectStatus = 1
+            ORDER BY CreateOrderNumber DESC;
+        END
+ELSE IF @RoleId IN (6,7,8,9) -- for Top Management Roles Login
+        BEGIN
+
+        INSERT INTO @RejectedOrders
+(
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+)
+SELECT
+    CompanyCode,
+    CreateOrderNumber,
+    CartId
+FROM TB_Create_Dealer_Order
+WHERE CompanyCode = @CompanyCode
+    AND OrderRejectStatus = 1;
+
+
+            SELECT 
+                 CompanyCode, 
+                CreateOrderNumber,
+                DateOfPurchase,
+                CartId,
+                UserId,
+                Total_Items,
+                Total_Price,
+                CustomerName,
+                RepManCode,
+                Email,
+                SecondApprovalUserCode,
+                SalesIndentStatus,
+                OrderRejectStatus,
+				UserCode,
+				[OrderRejectDate],
+				[OrderRejectName],
+				[OrderRejectRole],
+				[Rejectedreason]
+            FROM TB_Create_Dealer_Order
+            WHERE CompanyCode = @CompanyCode 
+              AND OrderRejectStatus = 1
+            ORDER BY CreateOrderNumber DESC;
+        END 
+	       ELSE
+        BEGIN
+            PRINT 'Invalid User Role. No data found.';
+        END
+
+        SELECT
+        r.CreateOrderNumber,
+        i.SrNo,
+        i.Material_Description,
+        i.Material_Code,
+        ISNULL(Stock.Unrestricted_Kgs, 0) AS Stock,
+        i.Quantity,
+        i.Rate,
+        i.Qty_Into_Rate_Amt,
+        i.CartId,
+        i.CartItemId
+    FROM @RejectedOrders r
+    INNER JOIN TB_Cart_Items i
+    ON r.CartId = i.CartId
+    AND r.CompanyCode = i.CompanyCode
+    INNER JOIN TB_Create_Dealer_Order o
+    ON r.CreateOrderNumber = o.CreateOrderNumber
+    AND r.CompanyCode = o.CompanyCode
+
+    OUTER APPLY
+    (
+        SELECT TOP 1
+            Unrestricted_Kgs
+        FROM TB_StockDetails ts
+        WHERE ts.CompanyCode = o.CompanyCode
+          AND ts.Material = i.Material_Code
+          AND (o.Plant IS NULL OR ts.Storage_Location = o.Plant)
+        ORDER BY ts.Unrestricted_Kgs DESC
+    ) Stock
+
+    ORDER BY r.CreateOrderNumber DESC, i.SrNo;
+
+    END TRY
+    BEGIN CATCH
+        DECLARE @ErrorMessage NVARCHAR(MAX) = ERROR_MESSAGE();
+        DECLARE @ErrorSeverity INT = ERROR_SEVERITY();
+        DECLARE @ErrorState INT = ERROR_STATE();
+        DECLARE @ErrorLine INT = ERROR_LINE();
+        DECLARE @ErrorProcedure NVARCHAR(200) = ERROR_PROCEDURE();
+        
+        -- Insert error details into the error log table
+        INSERT INTO Error_Log (ErrorMessage, ErrorSeverity, ErrorState, ErrorLine, ErrorProcedure, ErrorDateTime)
+        VALUES (@ErrorMessage, @ErrorSeverity, @ErrorState, @ErrorLine, @ErrorProcedure, GETDATE());
+        
+        PRINT 'Error occurred in GetSalesIndent_RejectList_MASL';
+        PRINT 'Error Number: ' + CAST(ERROR_NUMBER() AS NVARCHAR(10));
+        PRINT 'Error Message: ' + @ErrorMessage;
+        PRINT 'Error Severity: ' + CAST(@ErrorSeverity AS NVARCHAR(10));
+        PRINT 'Error State: ' + CAST(@ErrorState AS NVARCHAR(10));
+        PRINT 'Error Line: ' + CAST(@ErrorLine AS NVARCHAR(10));
+        PRINT 'Error Procedure: ' + ISNULL(@ErrorProcedure, 'N/A');
+    END CATCH;
+END

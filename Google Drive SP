@@ -1,285 +1,184 @@
-/****** Object:  StoredProcedure [dbo].[GetBookingDetails]    Script Date: 8/5/2026 4:21:34 PM ******/
+USE [SalesOrderUAT]
+GO
+
 SET ANSI_NULLS ON
 GO
+
 SET QUOTED_IDENTIFIER ON
 GO
 
-ALTER PROCEDURE [dbo].[GetBookingDetails]
+ALTER PROCEDURE [dbo].[GetHierarchicalUsersByRoleId]
+(
     @UserCode NVARCHAR(50),
-    @BookingStatus NVARCHAR(50),
-    @CustomerCode NVARCHAR(50) = NULL  
+    @RoleId INT,
+    @RequestedRoleId INT
+)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @RoleId INT;
-
-    -- Get the RoleId of the logged-in user
-    SELECT @RoleId = UM.RoleId
-    FROM Users UM
-    WHERE UM.UserCode = @UserCode;
-
-    -- Stop when user does not exist
-    IF @RoleId IS NULL
-    BEGIN
-        RETURN;
-    END;
-
-    -- Find all users under the logged-in user
-    ;WITH UserHierarchy AS
-    (
-        -- Logged-in user
-        SELECT
-            U.UserCode
-        FROM Users U
-        WHERE U.UserCode = @UserCode
-
-        UNION ALL
-
-        -- Users reporting under the hierarchy
-        SELECT
-            U.UserCode
-        FROM Users U
-        INNER JOIN UserHierarchy UH
-            ON U.RepManCode = UH.UserCode
-    )
+    DECLARE @CompanyCode BIGINT = 1054;
 
     SELECT
-        O.OrderNumber,
-        O.CustomerCode,
-        O.BillingAddress,
-        O.ShippingAddress,
+        U.[UserCode],
+        U.[CompanyCode],
+        U.[UserType],
+        U.[Name],
+        U.[Email],
+        U.[RepManCode],
+        U.[IsActive],
+        U.[RoleId],
+        U.[UserId],
 
-        DO.ProductId,
-        DO.PriceCardType,
-        DO.ProductName,
-        DO.Condition_Amount,
-        DO.BookingPrice,
-        DO.OrderQuantity,
-        DO.OrderAmount,
-        DO.BookingAmount,
-        DO.BalanceAmountToPay,
-        DO.PrimaryRatio,
+        CASE
+            WHEN U.RoleId = 1
+                THEN ISNULL(CustomerRegion.RegionDescription, '')
+            ELSE ''
+        END AS Region
 
-        DO.SecondaryProductName,
-        DO.SecondaryCondition_Amount,
-        DO.SecondaryBookingPrice,
-        DO.SecondaryOrderQuantity,
-        DO.SecondaryOrderAmount,
-        DO.SecondaryBookingAmount,
-        DO.SecondaryBalanceAmountToPay,
-        DO.SecondaryRatio,
+    FROM dbo.Users U
 
-        DO.DispatchStatus,
-        DO.TMApproval,
-        DO.TMNAME,
-        DO.TMUserCode,
-        TMU.RoleId AS TMApprovalRole,
-
-        DO.HAApproval,
-        DO.HAName,
-        DO.HAUserCode,
-        HAU.RoleId AS ZMApprovalRole,
-
-        DO.DateOfPurchase,
-        DO.TMRejectionReasonId,
-        DO.HARejectionReasonId,
-        DO.PrimaryDispatchStatus,
-        DO.SecondaryDispatchStatus,
-
-        TR.Reason AS TMRejectionReason,
-        HR.Reason AS HARejectionReason,
-
-        DO.SoNumber,
-        DO.SODate
-
-    FROM DealerOrderMHZPC DO
-
-    INNER JOIN OrdersMHZPC O
-        ON DO.OrderNumber = O.OrderNumber
-
-    LEFT JOIN RejectionReasons TR
-        ON DO.TMRejectionReasonId = TR.Id
-
-    LEFT JOIN RejectionReasons HR
-        ON DO.HARejectionReasonId = HR.Id
-
-    LEFT JOIN Users TMU
-        ON DO.TMUserCode = TMU.UserCode
-
-    -- FIX: Previously this was joined using TMUserCode
-    LEFT JOIN Users HAU
-        ON DO.HAUserCode = HAU.UserCode
+    OUTER APPLY
+    (
+        SELECT TOP (1)
+            CM.RegionDescription
+        FROM dbo.TB_CustomerMaster CM
+        WHERE U.RoleId = 1
+          AND CM.CustomerCode = U.UserCode
+          AND CM.CompanyCode = U.CompanyCode
+        ORDER BY
+            CM.Updated_at DESC,
+            CM.CustomerId DESC
+    ) CustomerRegion
 
     WHERE
-    (
-        --------------------------------------------------------
-        -- Role 1: Customer can see only their own bookings
-        --------------------------------------------------------
+        U.CompanyCode = @CompanyCode
+        AND U.RoleId = @RequestedRoleId
+        AND
         (
-            @RoleId = 1
-            AND O.CustomerCode = @UserCode
-            AND
+            ---------------------------------------------------------
+            -- Business Admin, BHM and NSM
+            -- Can see all Customers, TMs and ZMs
+            ---------------------------------------------------------
             (
-                @CustomerCode IS NULL
-                OR O.CustomerCode = @CustomerCode
+                @RoleId IN (7, 6, 5)
             )
-        )
 
-        --------------------------------------------------------
-        -- Role 2: TM can see customers directly assigned to TM
-        --------------------------------------------------------
-        OR
-        (
-            @RoleId = 2
-            AND O.CustomerCode IN
-            (
-                SELECT DISTINCT
-                    CM.CustomerCode
-                FROM TB_CustomerMaster CM
-                WHERE CM.CompanyCode = 1054
-                  AND CM.TM = @UserCode
-                  AND
-                  (
-                      @CustomerCode IS NULL
-                      OR CM.CustomerCode = @CustomerCode
-                  )
-            )
-        )
+            OR
 
-        --------------------------------------------------------
-        -- Roles 3 and 4: Hierarchy-based customer access
-        --------------------------------------------------------
-        OR
-        (
-            @RoleId BETWEEN 3 AND 4
-            AND O.CustomerCode IN
+            ---------------------------------------------------------
+            -- Zonal Manager requesting Territory Managers
+            ---------------------------------------------------------
             (
-                SELECT DISTINCT
-                    CM.CustomerCode
-                FROM TB_CustomerMaster CM
-                WHERE CM.CompanyCode = 1054
-                  AND CM.TM IN
-                  (
-                      SELECT UH.UserCode
-                      FROM UserHierarchy UH
-                  )
-                  AND
-                  (
-                      @CustomerCode IS NULL
-                      OR CM.CustomerCode = @CustomerCode
-                  )
-            )
-        )
-
-        --------------------------------------------------------
-        -- RoleId > 4: Can see all orders for company 1054
-        --------------------------------------------------------
-        OR
-        (
-            @RoleId > 4
-            AND O.CustomerCode IN
-            (
-                SELECT DISTINCT
-                    CM.CustomerCode
-                FROM TB_CustomerMaster CM
-                WHERE CM.CompanyCode = 1054
-                  AND
-                  (
-                      @CustomerCode IS NULL
-                      OR CM.CustomerCode = @CustomerCode
-                  )
-            )
-        )
-    )
-
-    ------------------------------------------------------------
-    -- Booking status filtering
-    ------------------------------------------------------------
-    AND
-    (
-        --------------------------------------------------------
-        -- Rejected bookings
-        --------------------------------------------------------
-        (
-            @BookingStatus = 'Rejected'
-            AND
-            (
-                DO.TMApproval = 'Rejected'
-                OR DO.HAApproval = 'Rejected'
-            )
-        )
-
-        --------------------------------------------------------
-        -- Pending bookings
-        --------------------------------------------------------
-        OR
-        (
-            @BookingStatus = 'Pending'
-            AND DO.DispatchStatus = 'Pending'
-            AND
-            (
+                @RoleId = 4
+                AND @RequestedRoleId = 2
+                AND
                 (
-                    DO.TMApproval = 'Approved'
-                    AND DO.HAApproval = 'Pending'
-                )
-                OR
-                (
-                    DO.TMApproval = 'Pending'
-                    AND DO.HAApproval = 'Approved'
-                )
-                OR
-                (
-                    DO.TMApproval = 'Pending'
-                    AND DO.HAApproval = 'Pending'
+                    -- TM directly reporting to ZM
+                    U.RepManCode = @UserCode
+
+                    OR
+
+                    -- TM reporting to an RM under the ZM
+                    U.RepManCode IN
+                    (
+                        SELECT RM.UserCode
+                        FROM dbo.Users RM
+                        WHERE RM.RoleId = 3
+                          AND RM.RepManCode = @UserCode
+                          AND RM.IsActive = 1
+                          AND RM.CompanyCode = @CompanyCode
+                    )
                 )
             )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Zonal Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 4
+                AND @RequestedRoleId = 1
+                AND
+                (
+                    -- Customer directly reporting to ZM
+                    U.RepManCode = @UserCode
+
+                    OR
+
+                    -- Customer reporting to a TM under the ZM
+                    U.RepManCode IN
+                    (
+                        SELECT TM.UserCode
+                        FROM dbo.Users TM
+                        WHERE TM.RoleId = 2
+                          AND TM.CompanyCode = @CompanyCode
+                          AND
+                          (
+                              -- TM directly reporting to ZM
+                              TM.RepManCode = @UserCode
+
+                              OR
+
+                              -- TM reporting to RM under ZM
+                              TM.RepManCode IN
+                              (
+                                  SELECT RM.UserCode
+                                  FROM dbo.Users RM
+                                  WHERE RM.RoleId = 3
+                                    AND RM.RepManCode = @UserCode
+                                    AND RM.CompanyCode = @CompanyCode
+                              )
+                          )
+                    )
+                )
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Regional Manager requesting Territory Managers
+            ---------------------------------------------------------
+            (
+                @RoleId = 3
+                AND @RequestedRoleId = 2
+                AND U.RepManCode = @UserCode
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Regional Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 3
+                AND @RequestedRoleId = 1
+                AND U.RepManCode IN
+                (
+                    SELECT TM.UserCode
+                    FROM dbo.Users TM
+                    WHERE TM.RoleId = 2
+                      AND TM.RepManCode = @UserCode
+                      AND TM.IsActive = 1
+                      AND TM.CompanyCode = @CompanyCode
+                )
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Territory Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 2
+                AND @RequestedRoleId = 1
+                AND U.RepManCode = @UserCode
+            )
         )
 
-        --------------------------------------------------------
-        -- Approved bookings
-        --------------------------------------------------------
-        OR
-        (
-            @BookingStatus = 'Approved'
-            AND DO.DispatchStatus = 'Pending'
-            AND DO.TMApproval = 'Approved'
-            AND DO.HAApproval = 'Approved'
-        )
-    )
+    ORDER BY U.Name;
 
-    ------------------------------------------------------------
-    -- Remove orders where every item is fully dispatched
-    ------------------------------------------------------------
-AND
-(
-    @BookingStatus = 'Approved'
-    OR
-    O.OrderNumber NOT IN
-    (
-        SELECT D2.OrderNumber
-        FROM DealerOrderMHZPC D2
-        GROUP BY D2.OrderNumber
-        HAVING SUM
-        (
-            CASE
-                WHEN D2.PriceCardType = 'Single'
-                     AND ISNULL(D2.PrimaryDispatchStatus, '') <> 'Completed'
-                    THEN 1
-
-                WHEN D2.PriceCardType = 'Combo'
-                     AND
-                     (
-                         ISNULL(D2.PrimaryDispatchStatus, '') <> 'Completed'
-                         OR ISNULL(D2.SecondaryDispatchStatus, '') <> 'Completed'
-                     )
-                    THEN 1
-
-                ELSE 0
-            END
-        ) = 0
-    )
-)
-
-    OPTION (MAXRECURSION 100);
-END;
+    SET NOCOUNT OFF;
+END
+GO

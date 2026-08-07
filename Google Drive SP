@@ -1,69 +1,182 @@
 USE [SalesOrderUAT]
 GO
-/****** Object:  StoredProcedure [dbo].[usp_GetAllDispatchRequests]    Script Date: 07-08-2026 12.17.04 PM ******/
+/****** Object:  StoredProcedure [dbo].[GetHierarchicalUsersByRoleId]    Script Date: 07-08-2026 1.33.08 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-ALTER   PROCEDURE [dbo].[usp_GetAllDispatchRequests]
-    @PageNumber INT = 1,
-    @PageSize INT = 10
+ALTER PROCEDURE [dbo].[GetHierarchicalUsersByRoleId]
+(
+    @UserCode NVARCHAR(50),
+    @RoleId INT,
+    @RequestedRoleId INT
+)
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Prevent invalid pagination values
-    IF @PageNumber < 1
-        SET @PageNumber = 1;
+    DECLARE @CompanyCode BIGINT = 1054;
 
-    IF @PageSize < 1
-        SET @PageSize = 10;
-
-    IF @PageSize > 100
-        SET @PageSize = 100;
-
-    DECLARE @Offset INT;
-
-    SET @Offset = (@PageNumber - 1) * @PageSize;
-
-    -- First result set: total records
     SELECT
-        COUNT(1) AS TotalRecords
-    FROM dbo.DispatchRequests;
+        U.[UserCode],
+        U.[CompanyCode],
+        U.[UserType],
+        U.[Name],
+        U.[Email],
+        U.[RepManCode],
+        U.[IsActive],
+        U.[RoleId],
+        U.[UserId],
 
-    -- Second result set: paginated records
-    SELECT
-        DR.Id,
-        DR.CustomerCode,
-        DR.OrderNumber,
-        DR.ProductId,
-        DR.ItemId,
-        DR.PriceCardType,
-        DR.PricePerKg,
-        DR.BookingPrice,
-        DR.BookedQty,
-        DR.BookingAmtPaid,
-        DR.BalanceAmtToPay,
-        DR.BalanceQuantity,
-        DR.DispatchStatus,
-        DR.RequestForQuantityMT,
-        DR.AmountRequiredToDispatch,
-        DR.BookingAmountReceived,
-        DR.BalanceAmount,
-        DR.FromDate,
-        DR.ToDate,
-        DR.DispatchAddress,
-        DR.CreatedOn
-    FROM dbo.DispatchRequests AS DR
+        CASE
+            WHEN U.RoleId = 1
+                THEN ISNULL(CustomerRegion.RegionDescription, '')
+            ELSE ''
+        END AS Region
 
-    -- No DispatchStatus filter is applied.
-    -- Partial, Complete and every other status are returned.
+    FROM dbo.Users U
 
-    ORDER BY
-        DR.CreatedOn DESC,
-        DR.Id DESC
+    OUTER APPLY
+    (
+        SELECT TOP (1)
+            CM.RegionDescription
+        FROM dbo.TB_CustomerMaster CM
+        WHERE U.RoleId = 1
+          AND CM.CustomerCode = U.UserCode
+          AND CM.CompanyCode = U.CompanyCode
+        ORDER BY
+            CM.Updated_at DESC,
+            CM.CustomerId DESC
+    ) CustomerRegion
 
-    OFFSET @Offset ROWS
-    FETCH NEXT @PageSize ROWS ONLY;
+    WHERE
+        U.CompanyCode = @CompanyCode
+        AND U.RoleId = @RequestedRoleId
+        AND
+        (
+            ---------------------------------------------------------
+            -- Business Admin, BHM and NSM
+            -- Can see all Customers, TMs and ZMs
+            ---------------------------------------------------------
+            (
+                @RoleId IN (7, 6, 5)
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Zonal Manager requesting Territory Managers
+            ---------------------------------------------------------
+            (
+                @RoleId = 4
+                AND @RequestedRoleId = 2
+                AND
+                (
+                    -- TM directly reporting to ZM
+                    U.RepManCode = @UserCode
+
+                    OR
+
+                    -- TM reporting to an RM under the ZM
+                    U.RepManCode IN
+                    (
+                        SELECT RM.UserCode
+                        FROM dbo.Users RM
+                        WHERE RM.RoleId = 3
+                          AND RM.RepManCode = @UserCode
+                          AND RM.IsActive = 1
+                          AND RM.CompanyCode = @CompanyCode
+                    )
+                )
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Zonal Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 4
+                AND @RequestedRoleId = 1
+                AND
+                (
+                    -- Customer directly reporting to ZM
+                    U.RepManCode = @UserCode
+
+                    OR
+
+                    -- Customer reporting to a TM under the ZM
+                    U.RepManCode IN
+                    (
+                        SELECT TM.UserCode
+                        FROM dbo.Users TM
+                        WHERE TM.RoleId = 2
+                          AND TM.CompanyCode = @CompanyCode
+                          AND
+                          (
+                              -- TM directly reporting to ZM
+                              TM.RepManCode = @UserCode
+
+                              OR
+
+                              -- TM reporting to RM under ZM
+                              TM.RepManCode IN
+                              (
+                                  SELECT RM.UserCode
+                                  FROM dbo.Users RM
+                                  WHERE RM.RoleId = 3
+                                    AND RM.RepManCode = @UserCode
+                                    AND RM.CompanyCode = @CompanyCode
+                              )
+                          )
+                    )
+                )
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Regional Manager requesting Territory Managers
+            ---------------------------------------------------------
+            (
+                @RoleId = 3
+                AND @RequestedRoleId = 2
+                AND U.RepManCode = @UserCode
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Regional Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 3
+                AND @RequestedRoleId = 1
+                AND U.RepManCode IN
+                (
+                    SELECT TM.UserCode
+                    FROM dbo.Users TM
+                    WHERE TM.RoleId = 2
+                      AND TM.RepManCode = @UserCode
+                      AND TM.IsActive = 1
+                      AND TM.CompanyCode = @CompanyCode
+                )
+            )
+
+            OR
+
+            ---------------------------------------------------------
+            -- Territory Manager requesting Customers
+            ---------------------------------------------------------
+            (
+                @RoleId = 2
+                AND @RequestedRoleId = 1
+                AND U.RepManCode = @UserCode
+            )
+        )
+
+    ORDER BY U.Name;
+
+    SET NOCOUNT OFF;
 END

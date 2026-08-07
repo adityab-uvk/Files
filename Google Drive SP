@@ -1,1 +1,69 @@
-https://drive.google.com/file/d/1t_EN1e8vU3Emt0cMXmVoVoUE8Cgv5-5Y/view?usp=sharing
+USE [SalesOrderUAT]
+GO
+/****** Object:  StoredProcedure [dbo].[usp_GetAllDispatchRequests]    Script Date: 07-08-2026 12.17.04 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER   PROCEDURE [dbo].[usp_GetAllDispatchRequests]
+    @PageNumber INT = 1,
+    @PageSize INT = 10
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Prevent invalid pagination values
+    IF @PageNumber < 1
+        SET @PageNumber = 1;
+
+    IF @PageSize < 1
+        SET @PageSize = 10;
+
+    IF @PageSize > 100
+        SET @PageSize = 100;
+
+    DECLARE @Offset INT;
+
+    SET @Offset = (@PageNumber - 1) * @PageSize;
+
+    -- First result set: total records
+    SELECT
+        COUNT(1) AS TotalRecords
+    FROM dbo.DispatchRequests;
+
+    -- Second result set: paginated records
+    SELECT
+        DR.Id,
+        DR.CustomerCode,
+        DR.OrderNumber,
+        DR.ProductId,
+        DR.ItemId,
+        DR.PriceCardType,
+        DR.PricePerKg,
+        DR.BookingPrice,
+        DR.BookedQty,
+        DR.BookingAmtPaid,
+        DR.BalanceAmtToPay,
+        DR.BalanceQuantity,
+        DR.DispatchStatus,
+        DR.RequestForQuantityMT,
+        DR.AmountRequiredToDispatch,
+        DR.BookingAmountReceived,
+        DR.BalanceAmount,
+        DR.FromDate,
+        DR.ToDate,
+        DR.DispatchAddress,
+        DR.CreatedOn
+    FROM dbo.DispatchRequests AS DR
+
+    -- No DispatchStatus filter is applied.
+    -- Partial, Complete and every other status are returned.
+
+    ORDER BY
+        DR.CreatedOn DESC,
+        DR.Id DESC
+
+    OFFSET @Offset ROWS
+    FETCH NEXT @PageSize ROWS ONLY;
+END

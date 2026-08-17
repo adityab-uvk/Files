@@ -1,98 +1,647 @@
-DECLARE @CompanyCode BIGINT = '1054';
-DECLARE @ZMCode NVARCHAR(50) = '23147299';
+USE [SalesOrderUAT]
+GO
 
----------------------------------------------------------
--- ZM
----------------------------------------------------------
-SELECT
-    'ZM' AS LevelName,
-    UserCode,
-    RoleId,
-    RepManCode
-FROM dbo.Users
-WHERE CompanyCode = @CompanyCode
-  AND LTRIM(RTRIM(UserCode)) = @ZMCode;
+SET ANSI_NULLS ON
+GO
 
----------------------------------------------------------
--- RMs
----------------------------------------------------------
-SELECT
-    'RM' AS LevelName,
-    UserCode,
-    RoleId,
-    RepManCode
-FROM dbo.Users
-WHERE CompanyCode = @CompanyCode
+SET QUOTED_IDENTIFIER ON
+GO
 
-  AND LTRIM(RTRIM(RepManCode)) = @ZMCode;
 
----------------------------------------------------------
--- TMs
----------------------------------------------------------
-SELECT
-    'TM' AS LevelName,
-    tm.UserCode,
-    tm.RoleId,
-    tm.RepManCode
-FROM dbo.Users tm
-WHERE tm.CompanyCode = @CompanyCode
+ALTER PROCEDURE [dbo].[Get_PriceCard]
 
-  AND EXISTS
-  (
-      SELECT 1
-      FROM dbo.Users rm
-      WHERE rm.CompanyCode = @CompanyCode
-  
-        AND LTRIM(RTRIM(rm.UserCode))
-            = LTRIM(RTRIM(tm.RepManCode))
-        AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode
-  );
+    @CompanyCode       BIGINT,
+    @Status            BIT            = NULL,
+    @PriceCardType     NVARCHAR(100)  = NULL,
+    @Variety           NVARCHAR(100)  = NULL,
+    @CustomerCode      NVARCHAR(50)   = NULL,
+    @DestinationState  NVARCHAR(100)  = NULL
 
----------------------------------------------------------
--- Customer Master Customers
----------------------------------------------------------
-SELECT DISTINCT
-    cm.CustomerCode,
-    cm.TM,
-    cm.RegionDescription
-FROM dbo.TB_CustomerMaster cm
-WHERE cm.CompanyCode = @CompanyCode
-  AND EXISTS
-  (
-      SELECT 1
-      FROM dbo.Users tm
-      INNER JOIN dbo.Users rm
-          ON rm.CompanyCode = tm.CompanyCode
-     
-         AND LTRIM(RTRIM(rm.UserCode))
-             = LTRIM(RTRIM(tm.RepManCode))
-      WHERE tm.CompanyCode = @CompanyCode
+AS
+BEGIN
 
-        AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode
-        AND LTRIM(RTRIM(cm.TM))
-            = LTRIM(RTRIM(tm.UserCode))
-  );
+    SET NOCOUNT ON;
+
+
+    ------------------------------------------------------------
+    -- 1. Find role of incoming UserCode / CustomerCode
+    ------------------------------------------------------------
+
+    DECLARE @InputRoleId INT = NULL;
+
+
+    SELECT TOP (1)
+        @InputRoleId = u.RoleId
+    FROM dbo.Users u
+    WHERE u.CompanyCode = @CompanyCode
+      AND LTRIM(RTRIM(u.UserCode))
+            = LTRIM(RTRIM(@CustomerCode));
+
+
+    ------------------------------------------------------------
+    -- If value is not available in Users,
+    -- continue with old Customer behaviour
+    ------------------------------------------------------------
+
+    IF @InputRoleId IS NULL
+    BEGIN
+        SET @InputRoleId = 1;
+    END;
 
 
 
+    ------------------------------------------------------------
+    -- 2. Get state when logged-in user is Customer
+    ------------------------------------------------------------
+
+    DECLARE @CustomerState NVARCHAR(100) = NULL;
 
 
-LevelName	UserCode	RoleId	RepManCode
-ZM	23147299	4	
+    IF (
+        @CustomerCode IS NOT NULL
+        AND @InputRoleId = 1
+    )
+    BEGIN
+
+        SELECT TOP (1)
+            @CustomerState =
+                LTRIM(RTRIM(cm.RegionDescription))
+        FROM dbo.TB_CustomerMaster cm
+        WHERE cm.CompanyCode = @CompanyCode
+          AND LTRIM(RTRIM(cm.CustomerCode))
+                = LTRIM(RTRIM(@CustomerCode));
+
+    END;
 
 
-LevelName	UserCode	RoleId	RepManCode
-RM	25019412	2	23147299
-RM	25010844	2	23147299
-RM	25032173	2	23147299
+
+    ------------------------------------------------------------
+    -- 3. Create Visible Customers temp table
+    ------------------------------------------------------------
+
+    IF OBJECT_ID('tempdb..#VisibleCustomers') IS NOT NULL
+        DROP TABLE #VisibleCustomers;
 
 
-LevelName	UserCode	RoleId	RepManCode
-TM	MPOT003057	1	25010844
-TM	MPOT003529	1	25010844
-TM	MPOT003579	1	25010844
-TM	MPOT003532	1	25010844
-TM	MPOT003999	1	25010844
+    CREATE TABLE #VisibleCustomers
+    (
+        CustomerCode       NVARCHAR(50)  NOT NULL,
+        RegionDescription  NVARCHAR(100) NULL
+    );
 
 
-CustomerCode	TM	RegionDescription
+
+    ------------------------------------------------------------
+    -- 4. Build hierarchy for TM / RM / ZM
+    --
+    -- IMPORTANT CHANGE:
+    --
+    -- OLD LOGIC:
+    -- Role 4 -> Role 3 -> Role 2 -> Role 1
+    --
+    -- NEW LOGIC:
+    -- Follow Users.RepManCode automatically.
+    --
+    -- Therefore both these structures work:
+    --
+    -- 4 -> 3 -> 2 -> 1
+    --
+    -- OR
+    --
+    -- 4 -> 2 -> 1
+    ------------------------------------------------------------
+
+    IF (
+        @CustomerCode IS NOT NULL
+        AND @InputRoleId IN (2, 3, 4)
+    )
+    BEGIN
+
+
+        ------------------------------------------------------------
+        -- Store every user below current logged-in user
+        ------------------------------------------------------------
+
+        IF OBJECT_ID('tempdb..#HierarchyUsers') IS NOT NULL
+            DROP TABLE #HierarchyUsers;
+
+
+        CREATE TABLE #HierarchyUsers
+        (
+            UserCode NVARCHAR(50) NOT NULL PRIMARY KEY,
+            RoleId   INT NULL
+        );
+
+
+
+        ------------------------------------------------------------
+        -- Add logged-in user as starting/root user
+        ------------------------------------------------------------
+
+        INSERT INTO #HierarchyUsers
+        (
+            UserCode,
+            RoleId
+        )
+        SELECT TOP (1)
+            LTRIM(RTRIM(u.UserCode)),
+            u.RoleId
+        FROM dbo.Users u
+        WHERE u.CompanyCode = @CompanyCode
+          AND LTRIM(RTRIM(u.UserCode))
+                = LTRIM(RTRIM(@CustomerCode));
+
+
+
+        ------------------------------------------------------------
+        -- Recursively/iteratively find everybody below this user
+        --
+        -- Example:
+        --
+        -- 23147299
+        --    ↓
+        -- 25010844
+        --    ↓
+        -- MPOT003057
+        --
+        -- No fixed RoleId level is required.
+        ------------------------------------------------------------
+
+        DECLARE @RowsAdded INT = 1;
+
+
+        WHILE @RowsAdded > 0
+        BEGIN
+
+            INSERT INTO #HierarchyUsers
+            (
+                UserCode,
+                RoleId
+            )
+            SELECT
+                X.UserCode,
+                X.RoleId
+            FROM
+            (
+                SELECT
+                    LTRIM(RTRIM(u.UserCode)) AS UserCode,
+                    MAX(u.RoleId) AS RoleId
+                FROM dbo.Users u
+
+                INNER JOIN #HierarchyUsers parent
+                    ON LTRIM(RTRIM(u.RepManCode))
+                        = parent.UserCode
+
+                WHERE u.CompanyCode = @CompanyCode
+
+                  AND NULLIF(
+                        LTRIM(RTRIM(u.UserCode)),
+                        ''
+                      ) IS NOT NULL
+
+                  AND NOT EXISTS
+                  (
+                      SELECT 1
+                      FROM #HierarchyUsers existing
+                      WHERE existing.UserCode =
+                            LTRIM(RTRIM(u.UserCode))
+                  )
+
+                GROUP BY
+                    LTRIM(RTRIM(u.UserCode))
+
+            ) X;
+
+
+            SET @RowsAdded = @@ROWCOUNT;
+
+        END;
+
+
+
+        ------------------------------------------------------------
+        -- 5. Take RoleId = 1 users from hierarchy as Customers
+        --
+        -- Example:
+        --
+        -- 23147299       Role 4
+        --      ↓
+        -- 25010844       Role 2
+        --      ↓
+        -- MPOT003057     Role 1  <-- Visible Customer
+        ------------------------------------------------------------
+
+        INSERT INTO #VisibleCustomers
+        (
+            CustomerCode,
+            RegionDescription
+        )
+        SELECT DISTINCT
+
+            h.UserCode,
+
+            NULLIF(
+                LTRIM(RTRIM(cm.RegionDescription)),
+                ''
+            )
+
+        FROM #HierarchyUsers h
+
+        LEFT JOIN dbo.TB_CustomerMaster cm
+            ON cm.CompanyCode = @CompanyCode
+           AND LTRIM(RTRIM(cm.CustomerCode))
+                = h.UserCode
+
+        WHERE h.RoleId = 1;
+
+
+
+        ------------------------------------------------------------
+        -- 6. Also collect CustomerMaster customers mapped through TM
+        --
+        -- This keeps compatibility with existing CustomerMaster
+        -- mappings where TB_CustomerMaster.TM contains manager code.
+        ------------------------------------------------------------
+
+        INSERT INTO #VisibleCustomers
+        (
+            CustomerCode,
+            RegionDescription
+        )
+        SELECT DISTINCT
+
+            LTRIM(RTRIM(cm.CustomerCode)),
+
+            NULLIF(
+                LTRIM(RTRIM(cm.RegionDescription)),
+                ''
+            )
+
+        FROM dbo.TB_CustomerMaster cm
+
+        INNER JOIN #HierarchyUsers h
+            ON LTRIM(RTRIM(cm.TM))
+                = h.UserCode
+
+        WHERE cm.CompanyCode = @CompanyCode
+
+          AND NULLIF(
+                LTRIM(RTRIM(cm.CustomerCode)),
+                ''
+              ) IS NOT NULL;
+
+
+
+        ------------------------------------------------------------
+        -- 7. Remove duplicate customers
+        ------------------------------------------------------------
+
+        ;WITH DuplicateCustomers AS
+        (
+            SELECT
+
+                CustomerCode,
+                RegionDescription,
+
+                ROW_NUMBER() OVER
+                (
+                    PARTITION BY CustomerCode
+
+                    ORDER BY
+                        CASE
+                            WHEN RegionDescription IS NULL
+                                THEN 1
+                            ELSE 0
+                        END,
+
+                        CustomerCode
+                ) AS RowNo
+
+            FROM #VisibleCustomers
+        )
+
+        DELETE
+        FROM DuplicateCustomers
+        WHERE RowNo > 1;
+
+
+
+        ------------------------------------------------------------
+        -- Indexes to improve filtering
+        ------------------------------------------------------------
+
+        CREATE NONCLUSTERED INDEX IX_VisibleCustomers_Code
+            ON #VisibleCustomers(CustomerCode);
+
+
+        CREATE NONCLUSTERED INDEX IX_VisibleCustomers_State
+            ON #VisibleCustomers(RegionDescription);
+
+
+    END;
+
+
+
+    ------------------------------------------------------------
+    -- 8. Main PriceCard Query
+    ------------------------------------------------------------
+
+    SELECT
+
+        pc.Id,
+
+        pc.PriceCardType,
+
+        pc.Variety,
+
+        pc.Product,
+
+        pc.Generation,
+
+        pc.Grade,
+
+        gs.Size AS Size,
+
+        pc.BookingPrice,
+
+        pc.State,
+
+        pc.DestinationState,
+
+        pc.PrimaryRatio,
+
+        pc.SecondaryVariety,
+
+        pc.SecondaryProduct,
+
+        pc.SecondaryGeneration,
+
+        pc.SecondaryGrade,
+
+        gs2.Size AS SecondarySize,
+
+        pc.SecondaryBookingPrice,
+
+        pc.SecondaryRatio,
+
+        pc.CreatedOn,
+
+        pc.ConditionTable,
+
+        pc.Status,
+
+        COALESCE(
+            pc.PrimaryConditionAmount,
+            0
+        ) AS PrimaryConditionAmount,
+
+        COALESCE(
+            pc.SecondaryConditionAmount,
+            0
+        ) AS SecondaryConditionAmount
+
+
+    FROM dbo.TB_PriceCard pc
+
+
+    LEFT JOIN dbo.TB_GradeSize gs
+        ON pc.Grade = gs.Grade
+
+
+    LEFT JOIN dbo.TB_GradeSize gs2
+        ON pc.SecondaryGrade = gs2.Grade
+
+
+    WHERE
+
+        ------------------------------------------------------------
+        -- Normal filters
+        ------------------------------------------------------------
+
+        (
+            @Status IS NULL
+            OR pc.Status = @Status
+        )
+
+
+        AND
+        (
+            @PriceCardType IS NULL
+            OR pc.PriceCardType = @PriceCardType
+        )
+
+
+        AND
+        (
+            @Variety IS NULL
+            OR pc.Variety = @Variety
+        )
+
+
+
+        ------------------------------------------------------------
+        -- User / Customer visibility
+        ------------------------------------------------------------
+
+        AND
+        (
+
+            --------------------------------------------------------
+            -- CASE 1:
+            -- No customer/user supplied
+            --
+            -- Show all PriceCards
+            --------------------------------------------------------
+
+            @CustomerCode IS NULL
+
+
+
+            --------------------------------------------------------
+            -- CASE 2:
+            -- Logged-in user is Customer
+            --------------------------------------------------------
+
+            OR
+            (
+                @InputRoleId = 1
+
+                AND
+                (
+                    ------------------------------------------------
+                    -- Customer-specific PriceCard
+                    ------------------------------------------------
+
+                    (
+                        pc.CustomerCode IS NOT NULL
+
+                        AND LTRIM(RTRIM(pc.CustomerCode))
+                            = LTRIM(RTRIM(@CustomerCode))
+                    )
+
+
+                    OR
+
+
+                    ------------------------------------------------
+                    -- State-based PriceCard
+                    ------------------------------------------------
+
+                    (
+                        pc.DestinationState IS NOT NULL
+
+                        AND @CustomerState IS NOT NULL
+
+                        AND LTRIM(RTRIM(pc.DestinationState))
+                            = LTRIM(RTRIM(@CustomerState))
+
+                        AND
+                        (
+                            LTRIM(RTRIM(pc.State)) = 'Punjab'
+
+                            OR
+
+                            LTRIM(RTRIM(pc.State))
+                                = LTRIM(RTRIM(@CustomerState))
+                        )
+                    )
+
+                )
+
+            )
+
+
+
+            --------------------------------------------------------
+            -- CASE 3:
+            -- TM / RM / ZM
+            --------------------------------------------------------
+
+            OR
+            (
+                @CustomerCode IS NOT NULL
+
+                AND @InputRoleId IN (2, 3, 4)
+
+
+                ----------------------------------------------------
+                -- User must have at least one visible customer
+                ----------------------------------------------------
+
+                AND EXISTS
+                (
+                    SELECT 1
+                    FROM #VisibleCustomers
+                )
+
+
+                AND
+                (
+
+                    ------------------------------------------------
+                    -- Customer-specific PriceCard
+                    --
+                    -- PriceCard customer belongs to logged-in
+                    -- manager hierarchy
+                    ------------------------------------------------
+
+                    EXISTS
+                    (
+                        SELECT 1
+
+                        FROM #VisibleCustomers visibleCustomer
+
+                        WHERE
+                            LTRIM(RTRIM(visibleCustomer.CustomerCode))
+                                =
+                            LTRIM(RTRIM(pc.CustomerCode))
+                    )
+
+
+                    OR
+
+
+                    ------------------------------------------------
+                    -- State-based PriceCard
+                    ------------------------------------------------
+
+                    (
+                        ------------------------------------------------
+                        -- DestinationState must belong to one of
+                        -- manager's customers
+                        ------------------------------------------------
+
+                        EXISTS
+                        (
+                            SELECT 1
+
+                            FROM #VisibleCustomers visibleState
+
+                            WHERE
+                                visibleState.RegionDescription
+                                    IS NOT NULL
+
+                                AND LTRIM(
+                                        RTRIM(
+                                            visibleState.RegionDescription
+                                        )
+                                    )
+                                    =
+                                    LTRIM(
+                                        RTRIM(
+                                            pc.DestinationState
+                                        )
+                                    )
+                        )
+
+
+                        AND
+
+
+                        ------------------------------------------------
+                        -- Ex-State should either be Punjab
+                        -- OR one of manager's customer states
+                        ------------------------------------------------
+
+                        (
+                            LTRIM(RTRIM(pc.State)) = 'Punjab'
+
+
+                            OR
+
+
+                            EXISTS
+                            (
+                                SELECT 1
+
+                                FROM #VisibleCustomers visibleState2
+
+                                WHERE
+                                    visibleState2.RegionDescription
+                                        IS NOT NULL
+
+                                    AND LTRIM(
+                                            RTRIM(
+                                                visibleState2.RegionDescription
+                                            )
+                                        )
+                                        =
+                                        LTRIM(
+                                            RTRIM(
+                                                pc.State
+                                            )
+                                        )
+                            )
+
+                        )
+
+                    )
+
+                )
+
+            )
+
+        );
+
+END
+GO

@@ -1,4 +1,4 @@
-DECLARE @CompanyCode BIGINT = YOUR_COMPANY_CODE;
+DECLARE @CompanyCode BIGINT = '1054';
 DECLARE @ZMCode NVARCHAR(50) = '23147299';
 
 ---------------------------------------------------------
@@ -23,7 +23,7 @@ SELECT
     RepManCode
 FROM dbo.Users
 WHERE CompanyCode = @CompanyCode
-  AND RoleId = 3
+
   AND LTRIM(RTRIM(RepManCode)) = @ZMCode;
 
 ---------------------------------------------------------
@@ -36,13 +36,13 @@ SELECT
     tm.RepManCode
 FROM dbo.Users tm
 WHERE tm.CompanyCode = @CompanyCode
-  AND tm.RoleId = 2
+
   AND EXISTS
   (
       SELECT 1
       FROM dbo.Users rm
       WHERE rm.CompanyCode = @CompanyCode
-        AND rm.RoleId = 3
+  
         AND LTRIM(RTRIM(rm.UserCode))
             = LTRIM(RTRIM(tm.RepManCode))
         AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode
@@ -63,12 +63,36 @@ WHERE cm.CompanyCode = @CompanyCode
       FROM dbo.Users tm
       INNER JOIN dbo.Users rm
           ON rm.CompanyCode = tm.CompanyCode
-         AND rm.RoleId = 3
+     
          AND LTRIM(RTRIM(rm.UserCode))
              = LTRIM(RTRIM(tm.RepManCode))
       WHERE tm.CompanyCode = @CompanyCode
-        AND tm.RoleId = 2
+
         AND LTRIM(RTRIM(rm.RepManCode)) = @ZMCode
         AND LTRIM(RTRIM(cm.TM))
             = LTRIM(RTRIM(tm.UserCode))
   );
+
+
+
+
+
+LevelName	UserCode	RoleId	RepManCode
+ZM	23147299	4	
+
+
+LevelName	UserCode	RoleId	RepManCode
+RM	25019412	2	23147299
+RM	25010844	2	23147299
+RM	25032173	2	23147299
+
+
+LevelName	UserCode	RoleId	RepManCode
+TM	MPOT003057	1	25010844
+TM	MPOT003529	1	25010844
+TM	MPOT003579	1	25010844
+TM	MPOT003532	1	25010844
+TM	MPOT003999	1	25010844
+
+
+CustomerCode	TM	RegionDescription

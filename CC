@@ -7,3 +7,45 @@ SELECT
 FROM [CropCareDB].[dbo].[Users]
 GROUP BY RepManCode
 ORDER BY UserCount DESC;
+
+
+INSERT INTO [CropCareDB].[dbo].[Users]
+(
+    [UserCode],
+    [CompanyCode],
+    [UserType],
+    [Name],
+    [ContactNumber],
+    [Email],
+    [Password],
+    [RepManCode],
+    [IsActive],
+    [RoleId],
+    [FirstName],
+    [LastName],
+    [Role_Details],
+    [JobTitle],
+    [Location],
+    [MPIN],
+    [Updated_At]
+)
+VALUES
+(
+    '00204861',
+    1049,
+    'Employee',
+    'Siddheshwar Tambe',
+    '',
+    '00204861@mahindra.com',
+    'C/qsNnXbAKmffuo+sHNoia595JaAI8etEgEAfOlD500=',
+    '25000668',
+    0,
+    2,
+    'Siddheshwar',
+    'Tambe',
+    'TM',
+    'Area Sales Manager',
+    'FSSL1750',
+    NULL,
+    GETDATE()
+);

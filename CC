@@ -1,1 +1,9 @@
 TRAPPER SUPER 1 LTR (ALU)
+
+
+SELECT 
+    RepManCode,
+    COUNT(*) AS UserCount
+FROM [CropCareDB].[dbo].[Users]
+GROUP BY RepManCode
+ORDER BY UserCount DESC;

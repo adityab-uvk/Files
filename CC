@@ -1,6 +1,10 @@
 SELECT 
     Condition_Table,
-    COUNT(DISTINCT Material_Number) AS ProductCount
+    Material_Number,
+    Material_Description,
+    Condition_Amount,
+    Customer_Number,
+    Region
 FROM TB_PriceMaster
 WHERE CompanyCode = 1070
   AND SalesOrganisation = 'MCPL'
@@ -10,5 +14,4 @@ WHERE CompanyCode = 1070
   AND (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
   AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
   AND (Deletion_Indicator IS NULL OR Deletion_Indicator NOT LIKE '%X%')
-GROUP BY Condition_Table
 ORDER BY Condition_Table;

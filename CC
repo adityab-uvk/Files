@@ -1,4 +1,24 @@
-AND (
-    @CompanyCode = 1070
-    OR UPPER(LTRIM(RTRIM(PM.Crop))) <> 'UNKNOWN'
-)
+DECLARE @CompanyCode INT = 1070;
+DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
+
+SELECT COUNT(*) AS ValidProducts
+FROM TB_PriceMaster PM WITH (NOLOCK)
+LEFT JOIN TB_ProductImages PI WITH (NOLOCK)
+    ON PM.CompanyCode = PI.CompanyCode
+    AND (
+        PM.Material_Description LIKE PI.ProductName + '%'
+        OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
+    )
+WHERE PM.CompanyCode = @CompanyCode
+  AND PM.Condition_Type = 'ZBAG'
+  AND (@CurrentDate >= PM.Valid_From OR PM.Valid_From IS NULL)
+  AND (@CurrentDate <= PM.Valid_To OR PM.Valid_To IS NULL)
+  AND (
+        PM.Deletion_Indicator IS NULL
+        OR PM.Deletion_Indicator NOT LIKE '%X%'
+      )
+  AND (
+        @CompanyCode = 1070
+        OR UPPER(LTRIM(RTRIM(PM.Crop))) <> 'UNKNOWN'
+      )
+  AND PI.APIURL IS NOT NULL;

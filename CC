@@ -49,3 +49,18 @@ WHERE CompanyCode = 1070
   AND (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
   AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
   AND (Deletion_Indicator IS NULL OR Deletion_Indicator NOT LIKE '%X%');
+
+
+-------------------------------
+
+
+SELECT 
+    Crop,
+    COUNT(*) AS Count
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG'
+  AND (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
+  AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
+  AND (Deletion_Indicator IS NULL OR Deletion_Indicator NOT LIKE '%X%')
+GROUP BY Crop;

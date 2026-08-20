@@ -1,4 +1,32 @@
-SELECT COUNT(*) AS ValidProductCount
+SELECT COUNT(*) AS ProductCount
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG';
+
+
+------------------------------------
+
+
+SELECT TOP 20
+    CompanyCode,
+    Material_Number,
+    Material_Description,
+    Condition_Type,
+    Crop,
+    Valid_From,
+    Valid_To,
+    Deletion_Indicator
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG';
+
+-------------------------------------
+
+SELECT TOP 20
+    PM.Material_Number,
+    PM.Material_Description,
+    PI.ProductName,
+    PI.APIURL
 FROM TB_PriceMaster PM
 LEFT JOIN TB_ProductImages PI
     ON PM.CompanyCode = PI.CompanyCode
@@ -7,9 +35,17 @@ LEFT JOIN TB_ProductImages PI
         OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
     )
 WHERE PM.CompanyCode = 1070
-  AND PM.Condition_Type = 'ZBAG'
-  AND (CAST(GETDATE() AS DATE) >= PM.Valid_From OR PM.Valid_From IS NULL)
-  AND (CAST(GETDATE() AS DATE) <= PM.Valid_To OR PM.Valid_To IS NULL)
-  AND (PM.Deletion_Indicator IS NULL OR PM.Deletion_Indicator NOT LIKE '%X%')
-  AND UPPER(LTRIM(RTRIM(PM.Crop))) <> 'UNKNOWN'
-  AND PI.APIURL IS NOT NULL;
+  AND PM.Condition_Type = 'ZBAG';
+
+
+
+--------------------------------------
+
+SELECT 
+    COUNT(*) AS Total
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG'
+  AND (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
+  AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
+  AND (Deletion_Indicator IS NULL OR Deletion_Indicator NOT LIKE '%X%');

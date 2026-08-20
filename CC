@@ -1,6 +1,14 @@
-DECLARE @SalesOrg NVARCHAR(10);
-
-IF @CompanyCode = 1070
-    SET @SalesOrg = N'MCPL';
-ELSE
-    SET @SalesOrg = N'AG01';
+SELECT 
+    Condition_Table,
+    Condition_Type,
+    COUNT(*) AS RecordCount
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND SalesOrganisation = 'MCPL'
+  AND Condition_Type IN ('ZBAG', 'ZDIS')
+GROUP BY 
+    Condition_Table,
+    Condition_Type
+ORDER BY 
+    Condition_Table,
+    Condition_Type;

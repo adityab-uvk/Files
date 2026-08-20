@@ -1,14 +1,14 @@
 SELECT 
     Condition_Table,
-    Condition_Type,
-    COUNT(*) AS RecordCount
+    COUNT(DISTINCT Material_Number) AS ProductCount
 FROM TB_PriceMaster
 WHERE CompanyCode = 1070
   AND SalesOrganisation = 'MCPL'
-  AND Condition_Type IN ('ZBAG', 'ZDIS')
-GROUP BY 
-    Condition_Table,
-    Condition_Type
-ORDER BY 
-    Condition_Table,
-    Condition_Type;
+  AND Condition_Type = 'ZBAG'
+  AND Condition_Table IN ('A860', 'A862', 'A877')
+  AND Condition_Amount IS NOT NULL
+  AND (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
+  AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
+  AND (Deletion_Indicator IS NULL OR Deletion_Indicator NOT LIKE '%X%')
+GROUP BY Condition_Table
+ORDER BY Condition_Table;

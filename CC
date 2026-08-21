@@ -1,58 +1,320 @@
-IF @CompanyCode = 1070
+USE [agriuatdb]
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[AddtoCart_MASL]
+    
+    @UserCode NVARCHAR(20),
+    @CompanyCode BIGINT,
+    @Material_Code NVARCHAR(50),
+    @Material_Description NVARCHAR(120),
+    @Crop NVARCHAR(40),
+    @Variety NVARCHAR(40),
+    @Stage NVARCHAR(20),
+    @Grade NVARCHAR(20),
+    @Unit_Of_Measurement NVARCHAR(20),
+    @Quantity DECIMAL(15,3),
+
+    @CartId BIGINT,
+    @Email NVARCHAR(120),
+    @UserId BIGINT,
+    @SrNo INT,
+    @Role_Details NVARCHAR(MAX),
+    @IsActive_User BIT,
+    @UserName NVARCHAR(MAX),
+    @ImagePath NVARCHAR(MAX),
+    @Rate FLOAT,
+    @QtyIntoRate_Amt FLOAT,
+    @Unrestricted_Kgs DECIMAL(15,3),
+    @PackSize NVARCHAR(50),
+    @Division NVARCHAR(5),
+
+    @Status INT OUTPUT,
+    @Message NVARCHAR(500) OUTPUT
+
+AS
 BEGIN
+    SET NOCOUNT ON;
 
-    ;WITH Products AS
-    (
-        SELECT
-            PM.CompanyCode,
-            PM.Material_Number,
-            PM.Material_Description,
-            PM.Crop,
-            PM.Variety,
-            PM.Stage,
-            PM.Grade,
-            PM.Unit_Of_Measurement,
-            PI.APIURL AS ImagePath,
-            CAST(0 AS DECIMAL(18,2)) AS Condition_Amount,
-            PM.PackSize,
-            PM.DIVISION,
+    BEGIN TRY
 
-            ROW_NUMBER() OVER
-            (
-                PARTITION BY PM.Material_Number
-                ORDER BY PM.Valid_To DESC, PM.Valid_From DESC
-            ) AS RowNum
+        DECLARE @LastWord NVARCHAR(20);
+        DECLARE @PackSizeValue DECIMAL(10, 4);
+        DECLARE @PackSizeKG DECIMAL(10, 4);
 
-        FROM TB_PriceMaster PM WITH (NOLOCK)
 
-        LEFT JOIN TB_ProductImages PI WITH (NOLOCK)
-            ON PM.CompanyCode = PI.CompanyCode
-            AND (
-                PM.Material_Description LIKE PI.ProductName + '%'
-                OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
-            )
+        -------------------------------------------------
+        -- COMPANY 1070 TEMPORARY EXCEPTION
+        -------------------------------------------------
+        -- Business rules for CompanyCode 1070 are not
+        -- finalized yet.
+        --
+        -- Therefore, for 1070:
+        -- 1. Skip pack-size extraction
+        -- 2. Skip G/KG validation
+        -- 3. Skip VG minimum quantity validation
+        -- 4. Skip pack-size multiple validation
+        --
+        -- Existing validation remains unchanged for
+        -- all other companies.
+        -------------------------------------------------
 
-        WHERE PM.CompanyCode = 1070
-          AND PM.Condition_Type = 'ZBAG'
-          AND PM.SalesOrganisation = 'MCPL'
-    )
+        IF @CompanyCode <> 1070
+        BEGIN
 
-    SELECT
-        CompanyCode,
-        Material_Number,
-        Material_Description,
-        Crop,
-        Variety,
-        Stage,
-        Grade,
-        Unit_Of_Measurement,
-        ImagePath,
-        Condition_Amount,
-        PackSize,
-        DIVISION
-    FROM Products
-    WHERE RowNum = 1
-    ORDER BY Material_Number;
+            -------------------------------------------------
+            -- EXISTING PACK SIZE EXTRACTION LOGIC
+            -------------------------------------------------
 
-    RETURN;
-END
+            SET @LastWord =
+                RIGHT(
+                    @Material_Description,
+                    CHARINDEX(
+                        ' ',
+                        REVERSE(@Material_Description) + ' '
+                    ) - 1
+                );
+
+
+            -------------------------------------------------
+            -- EXISTING CONVERT TO KG LOGIC
+            -------------------------------------------------
+
+            IF UPPER(@LastWord) LIKE '%KG'
+            BEGIN
+
+                SET @PackSizeValue =
+                    TRY_CAST(
+                        REPLACE(
+                            UPPER(@LastWord),
+                            'KG',
+                            ''
+                        ) AS DECIMAL(10, 4)
+                    );
+
+                SET @PackSizeKG = @PackSizeValue;
+
+            END
+
+            ELSE IF UPPER(@LastWord) LIKE '%G'
+            BEGIN
+
+                SET @PackSizeValue =
+                    TRY_CAST(
+                        REPLACE(
+                            UPPER(@LastWord),
+                            'G',
+                            ''
+                        ) AS DECIMAL(10, 4)
+                    );
+
+                SET @PackSizeKG = @PackSizeValue / 1000;
+
+            END
+
+            ELSE
+            BEGIN
+
+                SET @Status = 0;
+
+                SET @Message =
+                    'Unable to extract valid pack size (G or KG) from Material Description.';
+
+                RETURN;
+
+            END
+
+
+            -------------------------------------------------
+            -- EXISTING VG DIVISION LOGIC
+            -------------------------------------------------
+
+            IF @Division = 'VG'
+            BEGIN
+
+                -- Minimum quantity = 0.250 KG
+                IF @Quantity < 0.250
+                BEGIN
+
+                    SET @Status = 0;
+
+                    SET @Message =
+                        'Minimum quantity for VG division is 0.250 KG.';
+
+                    RETURN;
+
+                END
+
+
+                -- Must be multiple of pack size
+                IF @PackSizeKG IS NOT NULL
+                   AND (@Quantity % @PackSizeKG) <> 0
+                BEGIN
+
+                    SET @Status = 0;
+
+                    SET @Message =
+                        'Quantity must be in multiples of '
+                        + CAST(@PackSizeKG AS NVARCHAR(20))
+                        + ' KG.';
+
+                    RETURN;
+
+                END
+
+            END
+
+
+            -------------------------------------------------
+            -- EXISTING DIVISION 25 LOGIC
+            -------------------------------------------------
+
+            ELSE
+            BEGIN
+
+                -- User quantity is already in KG
+                IF @PackSizeKG IS NOT NULL
+                   AND (
+                        @Quantity < @PackSizeKG
+                        OR (@Quantity % @PackSizeKG) <> 0
+                   )
+                BEGIN
+
+                    SET @Status = 0;
+
+                    SET @Message =
+                        'Quantity must be in multiples of '
+                        + CAST(@PackSizeKG AS NVARCHAR)
+                        + ' KG as per pack size.';
+
+                    RETURN;
+
+                END
+
+            END
+
+        END
+        -- END OF COMPANY 1070 EXCEPTION
+
+
+        -------------------------------------------------
+        -- COMMON CART INSERT
+        -------------------------------------------------
+        -- This INSERT is executed for BOTH:
+        -- Company 1070
+        -- AND all existing companies.
+        -------------------------------------------------
+
+        INSERT INTO TB_Cart_Items
+        (
+            UserCode,
+            CompanyCode,
+            Material_Code,
+            Material_Description,
+            Crop,
+            Variety,
+            Stage,
+            Grade,
+            Unit_Of_Measurement,
+            Quantity,
+            CartId,
+            Email,
+            UserId,
+            SrNo,
+            Role_Details,
+            IsActive_User,
+            UserName,
+            Rate,
+            Qty_Into_Rate_Amt,
+            Unrestricted_Kgs,
+            ImagePath,
+            PackSize,
+            Division
+        )
+        VALUES
+        (
+            @UserCode,
+            @CompanyCode,
+            @Material_Code,
+            @Material_Description,
+            @Crop,
+            @Variety,
+            @Stage,
+            @Grade,
+            @Unit_Of_Measurement,
+            @Quantity,
+            @CartId,
+            @Email,
+            @UserId,
+            @SrNo,
+            @Role_Details,
+            @IsActive_User,
+            @UserName,
+            @Rate,
+
+            -- Calculate amount dynamically
+            @Rate * @Quantity,
+
+            @Unrestricted_Kgs,
+            @ImagePath,
+            @PackSize,
+            @Division
+        );
+
+
+        -------------------------------------------------
+        -- RETURN SUCCESS
+        -------------------------------------------------
+
+        SET @Status = 1;
+
+        SET @Message =
+            'Item added to cart successfully.';
+
+    END TRY
+
+
+    BEGIN CATCH
+
+        -------------------------------------------------
+        -- ERROR LOGGING
+        -------------------------------------------------
+
+        INSERT INTO ErrorLog_AddtoCart
+        (
+            ErrorMessage,
+            ErrorSeverity,
+            ErrorState,
+            ProcedureName,
+            ErrorLine,
+            ErrorDate
+        )
+        VALUES
+        (
+            ERROR_MESSAGE(),
+            ERROR_SEVERITY(),
+            ERROR_STATE(),
+            'AddtoCart',
+            ERROR_LINE(),
+            GETDATE()
+        );
+
+
+        -------------------------------------------------
+        -- RETURN FAILURE
+        -------------------------------------------------
+
+        SET @Status = 0;
+
+        SET @Message =
+            'Error adding item to cart: '
+            + ERROR_MESSAGE();
+
+    END CATCH;
+
+END;
+GO

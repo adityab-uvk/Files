@@ -1,43 +1,176 @@
--- Company-specific Division → CCA mapping
 
--- Temporary logic for CompanyCode 1070
--- Business rules are not finalized yet.
-IF @CompanyCode = '1070'
-BEGIN
-    -- Allow Division 27 for temporary flow
-    IF @Division = '27'
-    BEGIN
-        SET @IsEligible = 1;
-        SET @ResultMessage = N'Payment validation skipped for CompanyCode 1070. Order allowed.';
-        SET @OutstandingAmount = 0;
-        RETURN 0;
-    END
-    ELSE
-    BEGIN
-        SET @CCA = NULL;
-    END
-END
+INSERT INTO [dbo].[TB_PriceMaster]
+(
+    [CompanyCode],
+    [SalesOrganisation],
+    [Dist_Channel],
+    [Division],
+    [Material_Number],
+    [Material_Description],
+    [Material_Type],
+    [Condition_Type],
+    [Number_of_the_Condition_Record],
+    [Condition_Amount],
+    [Condition_Unit],
+    [Unit_Of_Measurement],
+    [Customer_Number],
+    [Plant],
+    [Region],
+    [Deletion_Indicator],
+    [Valid_From],
+    [Valid_To],
+    [Pricing_Unit],
+    [Booking_Amount],
+    [Variety],
+    [Crop],
+    [Grade],
+    [ImagePath],
+    [Stage],
+    [Condition_Table],
+    [PackSize],
+    [Priority],
+    [ProductId]
+)
+SELECT
+    PM.[CompanyCode],
 
-ELSE IF @CompanyCode = '1049'
-BEGIN
-    SET @CCA =
-        CASE
-            WHEN @Division = '25' THEN 'AGSD'
-            WHEN @Division = 'VG' THEN 'AGSV'
-            ELSE NULL
-        END;
-END
+    'MCPL' AS [SalesOrganisation],
 
-ELSE IF @CompanyCode = '1054'
-BEGIN
-    SET @CCA =
-        CASE
-            WHEN @Division = '29' THEN 'AGMH'
-            ELSE NULL
-        END;
-END
+    NULL AS [Dist_Channel],
 
-ELSE
-BEGIN
-    SET @CCA = NULL;
-END
+    27 AS [Division],
+
+    PM.[Material_Code] AS [Material_Number],
+
+    PM.[Material_Description],
+
+    'FERT' AS [Material_Type],
+
+    'ZBAG' AS [Condition_Type],
+
+    -----------------------------------------------------
+    -- RANDOM 10 DIGIT CONDITION RECORD NUMBER
+    -----------------------------------------------------
+    RIGHT(
+        '0000000000' +
+        CAST(
+            ABS(CHECKSUM(NEWID())) AS VARCHAR(10)
+        ),
+        10
+    ) AS [Number_of_the_Condition_Record],
+
+    -----------------------------------------------------
+    -- RANDOM PRICE BETWEEN 100 AND 500
+    -----------------------------------------------------
+    CAST(
+        100 +
+        (ABS(CHECKSUM(NEWID())) % 401)
+        AS DECIMAL(18,2)
+    ) AS [Condition_Amount],
+
+    'INR' AS [Condition_Unit],
+
+    PM.[Unit_Of_Measurement],
+
+    'AGSBB9378' AS [Customer_Number],
+
+    NULL AS [Plant],
+
+    NULL AS [Region],
+
+    NULL AS [Deletion_Indicator],
+
+    -----------------------------------------------------
+    -- CURRENT DATE
+    -----------------------------------------------------
+    CAST(GETDATE() AS DATE) AS [Valid_From],
+
+    -----------------------------------------------------
+    -- CURRENT DATE + 20 DAYS
+    -----------------------------------------------------
+    DATEADD(
+        DAY,
+        20,
+        CAST(GETDATE() AS DATE)
+    ) AS [Valid_To],
+
+    1 AS [Pricing_Unit],
+
+    NULL AS [Booking_Amount],
+
+    PM.[Variety],
+
+    PM.[Crop],
+
+    PM.[Grade],
+
+    PM.[ImagePath],
+
+    PM.[Stage],
+
+    'A860' AS [Condition_Table],
+
+    NULL AS [PackSize],
+
+    NULL AS [Priority],
+
+    PM.[ProductId]
+
+FROM [dbo].[TB_ProductMaster] PM
+
+WHERE PM.[CompanyCode] = 1070
+
+AND NOT EXISTS
+(
+    SELECT 1
+    FROM [dbo].[TB_PriceMaster] PR
+    WHERE PR.[CompanyCode] = PM.[CompanyCode]
+      AND LTRIM(RTRIM(PR.[Material_Number]))
+          =
+          LTRIM(RTRIM(PM.[Material_Code]))
+);
+
+
+---------------------------------------------------------
+-- CHECK INSERTED RECORDS
+---------------------------------------------------------
+
+SELECT
+    [Id],
+    [ProductId],
+    [CompanyCode],
+    [SalesOrganisation],
+    [Division],
+    [Material_Number],
+    [Material_Description],
+    [Material_Description_Lower],
+    [Material_Type],
+    [Condition_Type],
+    [Number_of_the_Condition_Record],
+    [Condition_Amount],
+    [Condition_Unit],
+    [Unit_Of_Measurement],
+    [Customer_Number],
+    [Valid_From],
+    [Valid_To],
+    [Pricing_Unit],
+    [Variety],
+    [Crop],
+    [Condition_Table]
+FROM [dbo].[TB_PriceMaster]
+WHERE [CompanyCode] = 1070
+ORDER BY [Id] DESC;
+
+
+---------------------------------------------------------
+-- AFTER CHECKING
+---------------------------------------------------------
+
+-- COMMIT TRANSACTION;
+
+
+---------------------------------------------------------
+-- IF SOMETHING IS WRONG
+---------------------------------------------------------
+
+-- ROLLBACK TRANSACTION;

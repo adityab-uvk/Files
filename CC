@@ -1,67 +1,11 @@
-IF @CompanyCode = 1070
-BEGIN
-
-    ;WITH Products AS
-    (
-        SELECT
-            PM.CompanyCode,
-            PM.Material_Number,
-            PM.Material_Description,
-            PM.Crop,
-            PM.Variety,
-            PM.Stage,
-            PM.Grade,
-            PM.Unit_Of_Measurement,
-            PI.APIURL AS ImagePath,
-
-            -- Use actual Condition Amount from PriceMaster
-            PM.Condition_Amount AS Condition_Amount,
-
-            PM.PackSize,
-            PM.DIVISION,
-
-            ROW_NUMBER() OVER
-            (
-                PARTITION BY PM.Material_Number
-                ORDER BY PM.Valid_To DESC, PM.Valid_From DESC
-            ) AS RowNum
-
-        FROM TB_PriceMaster PM WITH (NOLOCK)
-
-        LEFT JOIN TB_ProductImages PI WITH (NOLOCK)
-            ON PM.CompanyCode = PI.CompanyCode
-            AND (
-                PM.Material_Description LIKE PI.ProductName + '%'
-                OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
-            )
-
-        WHERE PM.CompanyCode = 1070
-          AND PM.Condition_Type = 'ZBAG'
-          AND PM.SalesOrganisation = 'MCPL'
-
-          -- Only products having an image
-          AND PI.APIURL IS NOT NULL
-
-          -- Only records having a price
-          AND PM.Condition_Amount IS NOT NULL
-    )
-
-    SELECT
-        CompanyCode,
-        Material_Number,
-        Material_Description,
-        Crop,
-        Variety,
-        Stage,
-        Grade,
-        Unit_Of_Measurement,
-        ImagePath,
-        Condition_Amount,
-        PackSize,
-        DIVISION
-    FROM Products
-    WHERE RowNum = 1
-    ORDER BY Material_Number;
-
-    RETURN;
-END
+B-SAFE
+TRAPPER SUPER
+AARTILO
+ATHLETE
+ATTILLA
+BAZOOKA
+BUSTER
+CELDOX
+CERTASTAR
+DAROGA
+TRAPPER SUPER

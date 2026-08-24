@@ -1,399 +1,310 @@
-/****** Object:  StoredProcedure [dbo].[GetHierarchyByUser_RSM]    Script Date: 8/23/2026 5:31:18 PM ******/
+USE [agriuatdb]
+GO
+/****** Object:  StoredProcedure [dbo].[ViewDetais_of_Product_ByStage]    Script Date: 24-08-2026 12:03:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-ALTER PROCEDURE [dbo].[GetHierarchyByUser_RSM]
-    @CompanyCode BIGINT,
-    @UserCode    NVARCHAR(50),
-    @RoleId      INT,
-    @Offset      INT = 0,
-    @PageSize    INT = 25
+ALTER PROCEDURE [dbo].[ViewDetais_of_Product_ByStage]
+    @CompanyCode INT,
+    @Variety NVARCHAR(40),
+    @CustomerCode  NVARCHAR(50) = NULL 
 AS
 BEGIN
     SET NOCOUNT ON;
 
     BEGIN TRY
-        IF @RoleId NOT IN (1,2,3,4,5,6,7) RETURN;
-        IF @RoleId = 1 RETURN;
-
-        -- Create temp table ONCE (avoid multi-definition compile error)
-        IF OBJECT_ID('tempdb..#Customers') IS NOT NULL DROP TABLE #Customers;
-
-        CREATE TABLE #Customers
-        (
-            UserCode    NVARCHAR(50)  NOT NULL,
-            CompanyCode BIGINT        NOT NULL,
-            UserType    NVARCHAR(50)  NULL,
-            Name        NVARCHAR(200) NULL,
-            Email       NVARCHAR(256) NULL,
-            RepManCode  NVARCHAR(50)  NULL,
-            IsActive    BIT           NOT NULL,
-            RoleId      INT           NOT NULL,
-            UserId      BIGINT        NOT NULL
-        );
-
-        ---------------------------------------------------------------------
-        -- TM (2)
-        ---------------------------------------------------------------------
-        IF @RoleId = 2
+        -- Basic input check (match original behavior)
+        IF @CompanyCode IS NULL OR @Variety IS NULL
         BEGIN
-            TRUNCATE TABLE #Customers;
+            RAISERROR ('Invalid input: CompanyCode or Variety cannot be NULL', 16, 1);
+            RETURN;
+        END;
 
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 2 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
+        DECLARE @CurrentDate    DATE         = CAST(GETDATE() AS DATE);
+        DECLARE @SalesOrg NVARCHAR(10);
+
+         IF @CompanyCode = 1070
+            SET @SalesOrg = N'MCPL';
+        ELSE
+            SET @SalesOrg = N'AG01';
+
+
+        ------------------------------------------------------------
+        -- =========================================================
+        -- COMPANY 1070
+        -- Direct ZBAG pricing
+        -- No A860/A935/A933/A862/A559 logic
+        -- No ZDIS calculation
+        -- =========================================================
+        ------------------------------------------------------------
+        IF @CompanyCode = 1070
+        BEGIN
+
+            ;WITH Products AS
+            (
+                SELECT
+                    PM.CompanyCode,
+                    PM.Material_Number,
+                    PM.Material_Description,
+                    PM.Crop,
+                    PM.Variety,
+                    PM.Stage,
+                    PM.Grade,
+                    PM.Unit_Of_Measurement,
+
+                    PI.APIURL AS ImagePath,
+
+                    PM.Condition_Amount,
+
+                    PM.PackSize,
+                    PM.DIVISION,
+
+                    ROW_NUMBER() OVER
+                    (
+                        PARTITION BY PM.Material_Number
+                        ORDER BY
+                            PM.Valid_To DESC,
+                            PM.Valid_From DESC,
+                            PM.Id DESC
+                    ) AS RowNum
+
+                FROM TB_PriceMaster PM WITH (NOLOCK)
+
+                LEFT JOIN TB_ProductImages PI WITH (NOLOCK)
+                    ON PM.CompanyCode = PI.CompanyCode
+                    AND
+                    (
+                        PM.Material_Description LIKE PI.ProductName + '%'
+                        OR
+                        PM.Material_Description LIKE '%' + PI.ProductName + '%'
+                    )
+
+                WHERE PM.CompanyCode = 1070
+
+                  -- 1070 uses MCPL
+                  AND PM.SalesOrganisation = 'MCPL'
+
+                  -- Only product/base price
+                  AND PM.Condition_Type = 'ZBAG'
+
+                  -- Requested variety
+                  AND PM.Variety = @Variety
+
+                  -- Keep image requirement
+                  AND PI.APIURL IS NOT NULL
+
+                  -- Validity filtering
+                  AND
+                  (
+                      @CurrentDate >= PM.Valid_From
+                      OR PM.Valid_From IS NULL
+                  )
+
+                  AND
+                  (
+                      @CurrentDate <= PM.Valid_To
+                      OR PM.Valid_To IS NULL
+                  )
+
+                  -- Do not show deleted products
+                  AND
+                  (
+                      PM.Deletion_Indicator IS NULL
+                      OR PM.Deletion_Indicator NOT LIKE '%X%'
+                  )
             )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
 
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
+            SELECT
+                CompanyCode,
+                Material_Number,
+                Material_Description,
+                Crop,
+                Variety,
+                Stage,
+                Grade,
+                Unit_Of_Measurement,
+                ImagePath,
+                Condition_Amount,
+                PackSize,
+                DIVISION AS Division
+            FROM Products
+            WHERE RowNum = 1
+            ORDER BY Material_Number;
 
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
             RETURN;
-        END
+        END;
 
-        ---------------------------------------------------------------------
-        -- RM (3)
-        ---------------------------------------------------------------------
-        IF @RoleId = 3
+        DECLARE @CustomerRegion NVARCHAR(50);
+
+        -- Region for incoming customer (used by A935)
+        IF @CustomerCode IS NOT NULL
         BEGIN
-            TRUNCATE TABLE #Customers;
+            SELECT TOP (1)
+                   @CustomerRegion = LTRIM(RTRIM(Region))
+            FROM TB_CustomerMaster WITH (NOLOCK)
+            WHERE CompanyCode = @CompanyCode AND CustomerCode = @CustomerCode
+			  END
 
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 3 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
-            )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
+        -- Priority list: keep all five in order
+        DECLARE @ConditionTablePriority TABLE (PriorityOrder INT, ConditionTable NVARCHAR(5));
+        INSERT INTO @ConditionTablePriority (PriorityOrder, ConditionTable)
+        VALUES (1,'A860'),(2,'A935'),(3,'A933'),(4,'A862'),(5,'A559');
 
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
+        ;WITH ValidProducts AS (
+            SELECT 
+                PM.CompanyCode,
+                ISNULL(PM.ProductId, PI.ProductId) AS ProductId,
+                PM.Material_Number,
+                PM.Material_Description,
+                PM.Crop,
+                PM.Variety,
+                PM.Stage,
+                PM.Grade,
+                PM.Unit_Of_Measurement,
+                PI.APIURL AS ImagePath,
+                PM.Priority,
+                PM.PackSize,
+                PM.DIVISION
+            FROM TB_PriceMaster PM WITH (NOLOCK)
+            LEFT JOIN TB_ProductImages PI WITH (NOLOCK)
+              ON PM.CompanyCode = PI.CompanyCode
+             AND (PM.Material_Description LIKE PI.ProductName + '%'
+               OR  PM.Material_Description LIKE '%' + PI.ProductName + '%')
+            WHERE PM.CompanyCode = @CompanyCode
+              AND PM.Variety     = @Variety
+              AND PM.Condition_Type = 'ZBAG'  -- catalog presence from bag rows
+              AND (@CurrentDate >= PM.Valid_From OR PM.Valid_From IS NULL)
+              AND (@CurrentDate <= PM.Valid_To   OR PM.Valid_To   IS NULL)
+              AND (PM.Deletion_Indicator IS NULL OR PM.Deletion_Indicator NOT LIKE '%X%')
+              AND UPPER(LTRIM(RTRIM(PM.Crop))) <> 'UNKNOWN'
+        ),
+        ProductConditions AS (
+            SELECT
+                VP.Material_Number,
+                VP.Material_Description,
+                ctp.PriorityOrder,
+                ctp.ConditionTable,
+                bag.Condition_Amount AS BagAmount,
+                dis.Condition_Amount AS DisAmount,
+                dis.Condition_Unit   AS DisUnit,
+                CASE 
+                    WHEN dis.Condition_Amount IS NOT NULL AND (dis.Condition_Unit = '%' OR dis.Condition_Unit <> '%' OR dis.Condition_Unit IS NULL)
+                     THEN bag.Condition_Amount - (bag.Condition_Amount * (
+						   ABS(CAST(dis.Condition_Amount AS DECIMAL(18,2))) / 10.0) / 100.0)
+                    WHEN dis.Condition_Amount IS NOT NULL AND (dis.Condition_Unit <> '%' OR dis.Condition_Unit IS NULL)
+                        THEN bag.Condition_Amount - dis.Condition_Amount
+                    ELSE bag.Condition_Amount
+                END AS CalculatedPrice,
+                ROW_NUMBER() OVER (
+                    PARTITION BY VP.Material_Number 
+                    ORDER BY ctp.PriorityOrder
+                ) AS ConditionPriorityRank
+            FROM ValidProducts VP
+            JOIN @ConditionTablePriority ctp
+              ON 1 = 1
 
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
+            -- ZBAG base row for each priority scope
+            LEFT JOIN TB_PriceMaster bag WITH (NOLOCK)
+              ON bag.CompanyCode       = @CompanyCode
+             AND bag.Material_Number   = VP.Material_Number
+             AND bag.Condition_Table   = ctp.ConditionTable
+             AND bag.Condition_Type    = 'ZBAG'
+             AND bag.SalesOrganisation = @SalesOrg
+             AND (
+                    -- A860: SalesOrg + Customer_Number + Material_Number
+                    (ctp.ConditionTable = 'A860' AND bag.Customer_Number = @CustomerCode)
 
-        ---------------------------------------------------------------------
-        -- ZM (4)
-        ---------------------------------------------------------------------
-        IF @RoleId = 4
-        BEGIN
-            TRUNCATE TABLE #Customers;
+                    -- A935: SalesOrg + Region + Material_Number
+                 OR (ctp.ConditionTable = 'A935' AND bag.Region = @CustomerRegion)
 
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 4 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
-            )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
+                    -- A933/A862: keep earlier behavior (no extra scoping beyond SalesOrg/material/table/type)
+                 OR (ctp.ConditionTable IN ('A933','A862'))
 
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
+                    -- A559: generic SalesOrg + Material_Number
+                 OR (ctp.ConditionTable = 'A559')
+                 )
+             AND (@CurrentDate >= bag.Valid_From OR bag.Valid_From IS NULL)
+             AND (@CurrentDate <= bag.Valid_To   OR bag.Valid_To   IS NULL)
+             AND (bag.Deletion_Indicator IS NULL OR bag.Deletion_Indicator NOT LIKE '%X%')
 
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
+            -- ZDIS discount row at the same scope
+            LEFT JOIN TB_PriceMaster dis WITH (NOLOCK)
+              ON dis.CompanyCode       = bag.CompanyCode
+             AND dis.Material_Number   = bag.Material_Number
+             AND dis.Condition_Table   = bag.Condition_Table
+             AND dis.Condition_Type    = 'ZDIS'
+             AND dis.SalesOrganisation = bag.SalesOrganisation
+             AND (
+                    (ctp.ConditionTable = 'A860' AND dis.Customer_Number = @CustomerCode)
+                 OR (ctp.ConditionTable = 'A935' AND dis.Region = @CustomerRegion)
+                 OR (ctp.ConditionTable IN ('A933','A862','A559')) -- unchanged scope for these
+                 )
+             AND (@CurrentDate >= dis.Valid_From OR dis.Valid_From IS NULL)
+             AND (@CurrentDate <= dis.Valid_To   OR dis.Valid_To   IS NULL)
+             AND (dis.Deletion_Indicator IS NULL OR dis.Deletion_Indicator NOT LIKE '%X%')
 
-        ---------------------------------------------------------------------
-        -- NSM (5)
-        ---------------------------------------------------------------------
-        IF @RoleId = 5
-        BEGIN
-            TRUNCATE TABLE #Customers;
+            WHERE bag.Condition_Amount IS NOT NULL
+        ),
+        RankedProductWithPrice AS (
+            SELECT
+                VP.*,
+                PC.CalculatedPrice AS Condition_Amount,
+                ROW_NUMBER() OVER (
+                    PARTITION BY VP.Material_Number 
+                    ORDER BY PC.ConditionPriorityRank
+                ) AS PriceRank
+            FROM ValidProducts VP
+            JOIN ProductConditions PC
+              ON VP.Material_Number = PC.Material_Number
+             AND PC.ConditionPriorityRank = 1
+        )
+        SELECT 
+            CompanyCode,
+            Material_Number,
+            Material_Description,
+            Crop,
+            Variety,
+            Stage,
+            Grade,
+            Unit_Of_Measurement,
+            ImagePath,
+            Condition_Amount,
+            PackSize,
+            Division
+        FROM RankedProductWithPrice
+        WHERE PriceRank = 1
+        ORDER BY Priority ASC;
 
-         INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- BHM (6)
-        ---------------------------------------------------------------------
-        IF @RoleId = 6
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-           INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- Business Admin (7)
-        ---------------------------------------------------------------------
-        IF @RoleId = 7
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
     END TRY
     BEGIN CATCH
-        INSERT INTO ErrorLog (ErrorProcedure, ErrorMessage, ErrorSeverity, ErrorState, ErrorDate)
-        VALUES ('GetHierarchyByUser_RSM', ERROR_MESSAGE(), ERROR_SEVERITY(), ERROR_STATE(), GETDATE());
-    END CATCH
-END/****** Object:  StoredProcedure [dbo].[GetHierarchyByUser_RSM]    Script Date: 8/23/2026 5:31:18 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER PROCEDURE [dbo].[GetHierarchyByUser_RSM]
-    @CompanyCode BIGINT,
-    @UserCode    NVARCHAR(50),
-    @RoleId      INT,
-    @Offset      INT = 0,
-    @PageSize    INT = 25
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    BEGIN TRY
-        IF @RoleId NOT IN (1,2,3,4,5,6,7) RETURN;
-        IF @RoleId = 1 RETURN;
-
-        -- Create temp table ONCE (avoid multi-definition compile error)
-        IF OBJECT_ID('tempdb..#Customers') IS NOT NULL DROP TABLE #Customers;
-
-        CREATE TABLE #Customers
+        INSERT INTO ErrorLog_GetProductOffering
         (
-            UserCode    NVARCHAR(50)  NOT NULL,
-            CompanyCode BIGINT        NOT NULL,
-            UserType    NVARCHAR(50)  NULL,
-            Name        NVARCHAR(200) NULL,
-            Email       NVARCHAR(256) NULL,
-            RepManCode  NVARCHAR(50)  NULL,
-            IsActive    BIT           NOT NULL,
-            RoleId      INT           NOT NULL,
-            UserId      BIGINT        NOT NULL
+            ErrorMessage, ErrorSeverity, ErrorState, ProcedureName, ErrorLine, ErrorDate
+        )
+        VALUES 
+        (
+            ERROR_MESSAGE(),
+            ERROR_SEVERITY(),
+            ERROR_STATE(),
+            'ViewDetais_of_Product_ByStage',
+            ERROR_LINE(),
+            GETDATE()
         );
 
-        ---------------------------------------------------------------------
-        -- TM (2)
-        ---------------------------------------------------------------------
-        IF @RoleId = 2
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 2 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
-            )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- RM (3)
-        ---------------------------------------------------------------------
-        IF @RoleId = 3
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 3 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
-            )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- ZM (4)
-        ---------------------------------------------------------------------
-        IF @RoleId = 4
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-            ;WITH HierarchyChain AS (
-                SELECT U.UserCode, U.RoleId
-                FROM dbo.Users U
-                WHERE U.UserCode = @UserCode AND U.RoleId = 4 AND U.CompanyCode = @CompanyCode
-                UNION ALL
-                SELECT C.UserCode, C.RoleId
-                FROM dbo.Users C
-                INNER JOIN HierarchyChain HC ON C.RepManCode = HC.UserCode
-                WHERE C.CompanyCode = @CompanyCode AND C.IsActive = 1
-            )
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            INNER JOIN HierarchyChain HC ON U.UserCode = HC.UserCode
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- NSM (5)
-        ---------------------------------------------------------------------
-        IF @RoleId = 5
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-         INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- BHM (6)
-        ---------------------------------------------------------------------
-        IF @RoleId = 6
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-           INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-
-        ---------------------------------------------------------------------
-        -- Business Admin (7)
-        ---------------------------------------------------------------------
-        IF @RoleId = 7
-        BEGIN
-            TRUNCATE TABLE #Customers;
-
-            INSERT INTO #Customers (UserCode, CompanyCode, UserType, Name, Email, RepManCode, IsActive, RoleId, UserId)
-            SELECT U.UserCode, U.CompanyCode, U.UserType, U.Name, U.Email, U.RepManCode, U.IsActive, U.RoleId, U.UserId
-            FROM dbo.Users U
-            WHERE U.RoleId = 1 AND U.CompanyCode = @CompanyCode AND U.IsActive = 1;
-
-            SELECT COUNT(1) AS TotalCount FROM #Customers;
-
-            SELECT *
-            FROM #Customers
-            ORDER BY UserCode
-            OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;
-            RETURN;
-        END
-    END TRY
-    BEGIN CATCH
-        INSERT INTO ErrorLog (ErrorProcedure, ErrorMessage, ErrorSeverity, ErrorState, ErrorDate)
-        VALUES ('GetHierarchyByUser_RSM', ERROR_MESSAGE(), ERROR_SEVERITY(), ERROR_STATE(), GETDATE());
+        SELECT 
+            NULL AS CompanyCode,
+            NULL AS Material_Number,
+            NULL AS Material_Description,
+            NULL AS Crop,
+            NULL AS Variety,
+            NULL AS Stage,
+            NULL AS Grade,
+            NULL AS Unit_Of_Measurement,
+            NULL AS ImagePath,
+            NULL AS Condition_Amount,
+            NULL AS PackSize,
+            NULL AS Division;
     END CATCH
 END

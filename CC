@@ -28,7 +28,7 @@ VALUES
     '25000669@mahindra.com',
     'C/qsNnXbAKmffuo+sHNoia595JaAI8etEgEAfOlD500=',
     '25000670',                         -- RepManCode
-    0,
+    1,
     4,
     'Aarav',
     'Sharma',
@@ -47,7 +47,7 @@ VALUES
     '25000670@mahindra.com',
     'C/qsNnXbAKmffuo+sHNoia595JaAI8etEgEAfOlD500=',
     '25000672',                              
-    0,
+    1,
     4,
     'Vikram',
     'Verma',

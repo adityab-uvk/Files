@@ -1,91 +1,59 @@
-ALTER PROCEDURE [dbo].[GetProductOffering_CompanyCode]
-    @CompanyCode INT
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    BEGIN TRY
-
-        ;WITH Valid AS
-        (
-            SELECT DISTINCT
-                LTRIM(RTRIM(PM.[Crop])) AS Crop,
-                LTRIM(RTRIM(PM.[PackSize])) AS PackSize
-            FROM dbo.TB_PriceMaster PM
-            WHERE PM.CompanyCode = @CompanyCode
-
-              AND (
-                    PM.Deletion_Indicator IS NULL
-                    OR PM.Deletion_Indicator NOT LIKE '%X%'
-                  )
-
-              AND PM.[Crop] IS NOT NULL
-              AND LTRIM(RTRIM(PM.[Crop])) <> ''
-
-              -- Exclude UNKNOWN
-              AND UPPER(LTRIM(RTRIM(PM.[Crop]))) <> 'UNKNOWN'
-
-              -- For 1070 PackSize is NULL, so don't filter it
-              AND
-              (
-                    @CompanyCode = 1070
-                    OR
-                    (
-                        PM.[PackSize] IS NOT NULL
-                        AND LTRIM(RTRIM(PM.[PackSize])) <> ''
-                        AND LTRIM(RTRIM(PM.[PackSize])) <> 'Crop'
-                    )
-              )
-        )
-
-        SELECT
-            V.Crop,
-            V.PackSize
-        FROM Valid V
-
-        OUTER APPLY
-        (
-            SELECT MIN(PP.Priority) AS CropPriority
-            FROM dbo.TB_ProductPriority PP
-            WHERE LTRIM(RTRIM(PP.Crop)) = V.Crop
-        ) CP
-
-        ORDER BY
-            CASE
-                WHEN CP.CropPriority IS NULL THEN 1
-                ELSE 0
-            END,
-            CP.CropPriority ASC,
-            V.Crop ASC;
-
-    END TRY
-
-    BEGIN CATCH
-
-        INSERT INTO ErrorLog_dashboard
-        (
-            ErrorNumber,
-            ErrorSeverity,
-            ErrorState,
-            ErrorProcedure,
-            ErrorLine,
-            ErrorMessage,
-            ProcedureName
-        )
-        VALUES
-        (
-            ERROR_NUMBER(),
-            ERROR_SEVERITY(),
-            ERROR_STATE(),
-            ERROR_PROCEDURE(),
-            ERROR_LINE(),
-            ERROR_MESSAGE(),
-            'GetProductOffering_CompanyCode'
-        );
-
-        SELECT
-            ERROR_NUMBER() AS ErrorNumber,
-            ERROR_MESSAGE() AS ErrorMessage;
-
-    END CATCH
-END
+INSERT INTO [dbo].[Users]
+(
+    [UserCode],
+    [CompanyCode],
+    [UserType],
+    [Name],
+    [ContactNumber],
+    [Email],
+    [Password],
+    [RepManCode],
+    [IsActive],
+    [RoleId],
+    [FirstName],
+    [LastName],
+    [Role_Details],
+    [JobTitle],
+    [Location],
+    [MPIN],
+    [Updated_At]
+)
+VALUES
+(
+    '25000669',
+    1070,
+    'Employee',
+    'Aarav Sharma',
+    NULL,
+    '25000669@mahindra.com',
+    'C/qsNnXbAKmffuo+sHNoia595JaAI8etEgEAfOlD500=',
+    '25000670',                         -- RepManCode
+    0,
+    4,
+    'Aarav',
+    'Sharma',
+    'ZM',
+    'Zonal Manager',
+    NULL,
+    NULL,
+    NULL
+),
+(
+    '25000670',
+    1070,
+    'Employee',
+    'Vikram Verma',
+    NULL,
+    '25000670@mahindra.com',
+    'C/qsNnXbAKmffuo+sHNoia595JaAI8etEgEAfOlD500=',
+    '25000672',                              
+    0,
+    4,
+    'Vikram',
+    'Verma',
+    'ZM',
+    'Zonal Manager',
+    NULL,
+    NULL,
+    NULL
+);

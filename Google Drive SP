@@ -1,29 +1,70 @@
-SELECT DISTINCT U.Email
-FROM Users U
-WHERE U.CompanyCode = 1049
-  AND U.Email IS NOT NULL
-  AND
-  (
-      U.RoleId IN (5, 9, 11)
+/****** Object:  StoredProcedure [dbo].[SP_Get_Order_Mail_Data_BHM]    Script Date: 9/9/2026 4:22:51 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[SP_Get_Order_Mail_Data_BHM]
+     @CreateOrderNumber BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
 
-      OR
-      (
-          U.UserCode = '25035256'
-          AND EXISTS
-          (
-              SELECT 1
-              FROM TB_Create_Dealer_Order O
-              WHERE O.CreateOrderNumber = @CreateOrderNumber
-                AND O.RMCode = '25035256'
-          )
-      )
-  );
+    /* ===============================
+       ORDER HEADER (BHM APPROVED ONLY)
+       =============================== */
+    SELECT TOP 1
+        O.CreateOrderNumber,
+        O.DateOfPurchase,
+        O.SONumber,
+        O.SO_Date,
+        O.CustomerName,
+        O.BillingAddress,
+        O.ShippingAddress,
+        O.Plant,
+        O.Total_Items,
+        O.Total_Price,
+        O.TMName,
+        O.RMName,
+        O.BHMName,
+        O.TMApproval_Date,
+        O.RMApproval_Date,
+        O.BHM_Approval,
+		'BHM' AS ApprovalFlow
+    FROM TB_Create_Dealer_Order O
+    WHERE O.CreateOrderNumber = @CreateOrderNumber
+      AND O.BHM_Approval = 1
+      AND O.SONumber IS NOT NULL;
 
-----------------------------------------------------------------------------------------------------------------
+    /* ===============================
+       ITEM DETAILS
+       =============================== */
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY i.CartItemId) AS SrNo,
+        i.Material_Description,
+        i.Quantity,
+        i.Rate,
+        CAST(i.Qty_Into_Rate_Amt AS DECIMAL(18,3)) AS Amount
+    FROM TB_Cart_Items i
+    WHERE i.CartId = (
+        SELECT CartId
+        FROM TB_Create_Dealer_Order
+        WHERE CreateOrderNumber = @CreateOrderNumber
+    );
 
-SELECT DISTINCT U.Email
-FROM Users U
-WHERE U.CompanyCode = 1049
+    /* ===============================
+       TO : PLANT TEAM
+       =============================== */
+    SELECT Email
+    FROM Users
+    WHERE UserCode IN ('202347','25018399','25012545','25027959')
+      AND Email IS NOT NULL;
+
+    /* ===============================
+       CC : COMMERCIAL + NSM + BHM
+       =============================== */
+    SELECT Email
+    FROM Users U
+    WHERE U.CompanyCode = 1049
   AND U.Email IS NOT NULL
   AND
   (
@@ -41,3 +82,90 @@ WHERE U.CompanyCode = 1049
           )
       )
   );
+END
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+/****** Object:  StoredProcedure [dbo].[SP_Get_Order_Mail_Data]    Script Date: 9/9/2026 4:21:17 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER PROCEDURE [dbo].[SP_Get_Order_Mail_Data]
+    @CreateOrderNumber BIGINT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Order Data
+    SELECT TOP 1
+        O.CreateOrderNumber,
+		O.DateOfPurchase,
+        O.SONumber,
+        O.SO_Date,
+        O.CustomerName,
+		O.BillingAddress,
+        O.ShippingAddress,
+        O.Plant,
+        O.Total_Items,
+        O.Total_Price,
+		 O.TMName,
+        O.RMName,
+        O.NSMName,
+       -- O.BHMName,
+        O.TMApproval_Date,
+        O.RMApproval_Date,
+        O.NSM_Approval,
+		'NSM' AS ApprovalFlow
+       -- O.BHM_Approval
+    FROM TB_Create_Dealer_Order O
+    WHERE O.CreateOrderNumber = @CreateOrderNumber
+      AND O.NSM_Approval = 1
+      AND O.SONumber IS NOT NULL;
+
+ SELECT
+        ROW_NUMBER() OVER (ORDER BY i.CartItemId) AS SrNo,
+        i.Material_Description,
+        i.Quantity,
+        i.Rate,
+         CAST(i.Qty_Into_Rate_Amt AS DECIMAL(18,3)) AS Amount
+    FROM TB_Cart_Items i
+    WHERE i.CartId = (
+        SELECT CartId
+        FROM TB_Create_Dealer_Order
+        WHERE CreateOrderNumber = @CreateOrderNumber
+    );
+
+    -- CFA Mail (TO)
+    SELECT EmailID
+    FROM TB_CFA_List
+    WHERE PlantCode = (
+        SELECT Plant FROM TB_Create_Dealer_Order
+        WHERE CreateOrderNumber = @CreateOrderNumber
+    );
+
+    -- CC Mails (Commercial + NSM)
+    SELECT Email
+    FROM Users U
+   WHERE U.CompanyCode = 1049
+  AND U.Email IS NOT NULL
+  AND
+  (
+      U.RoleId IN (5, 9, 11)
+
+      OR
+      (
+          U.UserCode = '25035256'
+          AND EXISTS
+          (
+              SELECT 1
+              FROM TB_Create_Dealer_Order O
+              WHERE O.CreateOrderNumber = @CreateOrderNumber
+                AND O.RMCode = '25035256'
+          )
+      )
+  );
+END

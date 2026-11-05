@@ -1,73 +1,25 @@
 DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
 
-;WITH BaseProducts AS
-(
-    SELECT *
-    FROM TB_PriceMaster
-    WHERE CompanyCode = 1070
-      AND Condition_Type = 'ZBAG'
-),
-DateFiltered AS
-(
-    SELECT *
-    FROM BaseProducts
-    WHERE (Valid_From IS NULL OR @CurrentDate >= Valid_From)
-      AND (Valid_To IS NULL OR @CurrentDate <= Valid_To)
-),
-DeletionFiltered AS
-(
-    SELECT *
-    FROM DateFiltered
-    WHERE Deletion_Indicator IS NULL
-       OR Deletion_Indicator NOT LIKE '%X%'
-),
-CropFiltered AS
-(
-    SELECT *
-    FROM DeletionFiltered
-    WHERE UPPER(LTRIM(RTRIM(Crop))) <> 'UNKNOWN'
-),
-ImageFiltered AS
-(
-    SELECT PM.*
-    FROM CropFiltered PM
-    WHERE EXISTS
-    (
-        SELECT 1
-        FROM TB_ProductImages PI
-        WHERE PI.CompanyCode = PM.CompanyCode
-          AND PI.APIURL IS NOT NULL
-          AND
-          (
-              PM.Material_Description LIKE PI.ProductName + '%'
-              OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
-          )
-    )
-)
-SELECT '1. Base ZBAG Products' AS Step,
-       COUNT(DISTINCT Material_Number) AS Total
-FROM BaseProducts
-
-UNION ALL
-
-SELECT '2. Valid Date',
-       COUNT(DISTINCT Material_Number)
-FROM DateFiltered
-
-UNION ALL
-
-SELECT '3. Valid Deletion Indicator',
-       COUNT(DISTINCT Material_Number)
-FROM DeletionFiltered
-
-UNION ALL
-
-SELECT '4. Valid Crop',
-       COUNT(DISTINCT Material_Number)
-FROM CropFiltered
-
-UNION ALL
-
-SELECT '5. Matching Product Image',
-       COUNT(DISTINCT Material_Number)
-FROM ImageFiltered;
+SELECT
+    CompanyCode,
+    Material_Number,
+    Material_Description,
+    Crop,
+    Valid_From,
+    Valid_To,
+    Deletion_Indicator
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG'
+  AND (
+        Valid_From IS NULL
+        OR @CurrentDate >= Valid_From
+      )
+  AND (
+        Valid_To IS NULL
+        OR @CurrentDate <= Valid_To
+      )
+  AND (
+        Deletion_Indicator IS NULL
+        OR Deletion_Indicator NOT LIKE '%X%'
+      );

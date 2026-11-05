@@ -1,55 +1,73 @@
 DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
 
-SELECT
-    COUNT(*) AS TotalMatchingRows,
-    COUNT(DISTINCT PM.Material_Number) AS DistinctMaterials
-FROM TB_PriceMaster PM
-LEFT JOIN TB_ProductImages PI
-    ON PM.CompanyCode = PI.CompanyCode
-    AND (
-        PM.Material_Description LIKE PI.ProductName + '%'
-        OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
+;WITH BaseProducts AS
+(
+    SELECT *
+    FROM TB_PriceMaster
+    WHERE CompanyCode = 1070
+      AND Condition_Type = 'ZBAG'
+),
+DateFiltered AS
+(
+    SELECT *
+    FROM BaseProducts
+    WHERE (Valid_From IS NULL OR @CurrentDate >= Valid_From)
+      AND (Valid_To IS NULL OR @CurrentDate <= Valid_To)
+),
+DeletionFiltered AS
+(
+    SELECT *
+    FROM DateFiltered
+    WHERE Deletion_Indicator IS NULL
+       OR Deletion_Indicator NOT LIKE '%X%'
+),
+CropFiltered AS
+(
+    SELECT *
+    FROM DeletionFiltered
+    WHERE UPPER(LTRIM(RTRIM(Crop))) <> 'UNKNOWN'
+),
+ImageFiltered AS
+(
+    SELECT PM.*
+    FROM CropFiltered PM
+    WHERE EXISTS
+    (
+        SELECT 1
+        FROM TB_ProductImages PI
+        WHERE PI.CompanyCode = PM.CompanyCode
+          AND PI.APIURL IS NOT NULL
+          AND
+          (
+              PM.Material_Description LIKE PI.ProductName + '%'
+              OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
+          )
     )
-WHERE PM.CompanyCode = 1070
-  AND PM.Condition_Type = 'ZBAG'
-  AND (
-        @CurrentDate >= PM.Valid_From
-        OR PM.Valid_From IS NULL
-      )
-  AND (
-        @CurrentDate <= PM.Valid_To
-        OR PM.Valid_To IS NULL
-      )
-  AND (
-        PM.Deletion_Indicator IS NULL
-        OR PM.Deletion_Indicator NOT LIKE '%X%'
-      )
-  AND UPPER(LTRIM(RTRIM(PM.Crop))) <> 'UNKNOWN'
-  AND PI.APIURL IS NOT NULL;
+)
+SELECT '1. Base ZBAG Products' AS Step,
+       COUNT(DISTINCT Material_Number) AS Total
+FROM BaseProducts
 
+UNION ALL
 
+SELECT '2. Valid Date',
+       COUNT(DISTINCT Material_Number)
+FROM DateFiltered
 
+UNION ALL
 
+SELECT '3. Valid Deletion Indicator',
+       COUNT(DISTINCT Material_Number)
+FROM DeletionFiltered
 
-SELECT
-    PM.Condition_Table,
-    COUNT(*) AS MatchingRecords
-FROM TB_PriceMaster PM
-WHERE PM.CompanyCode = 1070
-  AND PM.Condition_Type = 'ZBAG'
-  AND PM.SalesOrganisation = 'AG01'
-  AND PM.Condition_Table IN ('A860', 'A935', 'A933', 'A862', 'A559')
-  AND PM.Condition_Amount IS NOT NULL
-  AND (
-        PM.Valid_From IS NULL
-        OR CAST(GETDATE() AS DATE) >= PM.Valid_From
-      )
-  AND (
-        PM.Valid_To IS NULL
-        OR CAST(GETDATE() AS DATE) <= PM.Valid_To
-      )
-  AND (
-        PM.Deletion_Indicator IS NULL
-        OR PM.Deletion_Indicator NOT LIKE '%X%'
-      )
-GROUP BY PM.Condition_Table;
+UNION ALL
+
+SELECT '4. Valid Crop',
+       COUNT(DISTINCT Material_Number)
+FROM CropFiltered
+
+UNION ALL
+
+SELECT '5. Matching Product Image',
+       COUNT(DISTINCT Material_Number)
+FROM ImageFiltered;

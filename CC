@@ -1,19 +1,30 @@
 DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
 
 SELECT
-    Material_Number,
-    Material_Description,
-    Crop,
-    Valid_From,
-    Valid_To,
-    Condition_Amount,
     CASE
-        WHEN Valid_To < @CurrentDate THEN 'EXPIRED'
-        WHEN Valid_From > @CurrentDate THEN 'NOT YET VALID'
+        WHEN Valid_From > @CurrentDate
+            THEN 'NOT YET VALID'
+
+        WHEN Valid_To < @CurrentDate
+            THEN 'EXPIRED'
+
         ELSE 'VALID'
-    END AS ProductStatus
+    END AS ProductStatus,
+
+    COUNT(*) AS TotalRows,
+
+    COUNT(DISTINCT Material_Number) AS TotalProducts
+
 FROM TB_PriceMaster
 WHERE CompanyCode = 1070
   AND SalesOrganisation = 'MCPL'
   AND Condition_Type = 'ZBAG'
-ORDER BY Valid_To;
+
+GROUP BY
+    CASE
+        WHEN Valid_From > @CurrentDate
+            THEN 'NOT YET VALID'
+        WHEN Valid_To < @CurrentDate
+            THEN 'EXPIRED'
+        ELSE 'VALID'
+    END;

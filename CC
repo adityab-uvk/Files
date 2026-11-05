@@ -1,30 +1,6 @@
-DECLARE @CurrentDate DATE = CAST(GETDATE() AS DATE);
-
-SELECT
-    CASE
-        WHEN Valid_From > @CurrentDate
-            THEN 'NOT YET VALID'
-
-        WHEN Valid_To < @CurrentDate
-            THEN 'EXPIRED'
-
-        ELSE 'VALID'
-    END AS ProductStatus,
-
-    COUNT(*) AS TotalRows,
-
-    COUNT(DISTINCT Material_Number) AS TotalProducts
-
-FROM TB_PriceMaster
+UPDATE TB_PriceMaster
+SET Valid_To = DATEADD(MONTH, 2, CAST(GETDATE() AS DATE))
 WHERE CompanyCode = 1070
   AND SalesOrganisation = 'MCPL'
   AND Condition_Type = 'ZBAG'
-
-GROUP BY
-    CASE
-        WHEN Valid_From > @CurrentDate
-            THEN 'NOT YET VALID'
-        WHEN Valid_To < @CurrentDate
-            THEN 'EXPIRED'
-        ELSE 'VALID'
-    END;
+  AND Valid_To < CAST(GETDATE() AS DATE);

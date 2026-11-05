@@ -1,5 +1,65 @@
-EXEC dbo.GetProductOffering_MASL
-    @CompanyCode = 1063,
-    @CustomerCode = 'YOUR_CUSTOMER_CODE',
-    @PageNumber = 1,
-    @PageSize = 20;
+SELECT
+    CompanyCode,
+    Condition_Type,
+    COUNT(*) AS TotalRecords
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+GROUP BY CompanyCode, Condition_Type;
+
+
+SELECT
+    COUNT(*) AS TotalZBAG,
+    SUM(CASE
+        WHEN (Valid_From IS NULL OR CAST(GETDATE() AS DATE) >= Valid_From)
+         AND (Valid_To IS NULL OR CAST(GETDATE() AS DATE) <= Valid_To)
+        THEN 1 ELSE 0
+    END) AS ValidDateRecords,
+    SUM(CASE
+        WHEN Crop IS NOT NULL
+         AND UPPER(LTRIM(RTRIM(Crop))) <> 'UNKNOWN'
+        THEN 1 ELSE 0
+    END) AS ValidCropRecords
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type = 'ZBAG';
+
+
+
+SELECT
+    PM.Material_Number,
+    PM.Material_Description,
+    PM.Crop,
+    PI.ProductName,
+    PI.APIURL
+FROM TB_PriceMaster PM
+LEFT JOIN TB_ProductImages PI
+    ON PM.CompanyCode = PI.CompanyCode
+    AND (
+        PM.Material_Description LIKE PI.ProductName + '%'
+        OR PM.Material_Description LIKE '%' + PI.ProductName + '%'
+    )
+WHERE PM.CompanyCode = 1070
+  AND PM.Condition_Type = 'ZBAG';
+
+
+
+
+SELECT
+    CompanyCode,
+    CustomerCode,
+    Region
+FROM TB_CustomerMaster
+WHERE CompanyCode = 1070
+  AND CustomerCode = 'AGAAA4848';
+
+
+SELECT
+    Condition_Table,
+    Condition_Type,
+    COUNT(*) AS TotalRecords
+FROM TB_PriceMaster
+WHERE CompanyCode = 1070
+  AND Condition_Type IN ('ZBAG', 'ZDIS')
+  AND Condition_Table IN ('A860', 'A935', 'A933', 'A862', 'A559')
+GROUP BY Condition_Table, Condition_Type
+ORDER BY Condition_Table, Condition_Type;
